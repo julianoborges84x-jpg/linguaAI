@@ -1,0 +1,34 @@
+0 verbose cli /usr/bin/node /usr/bin/npm
+1 info using npm@10.8.2
+2 info using node@v20.20.0
+3 silly config load:file:/usr/lib/node_modules/npm/npmrc
+4 silly config load:file:/home/usuariocodex/.npmrc
+5 silly config load:file:/usr/etc/npmrc
+6 verbose title npm create vite@latest frontend --template react
+7 verbose argv "create" "vite@latest" "frontend" "--" "--template" "react"
+8 verbose logfile logs-max:10 dir:/home/usuariocodex/.npm/_logs/2026-02-18T16_10_43_604Z-
+9 verbose logfile /home/usuariocodex/.npm/_logs/2026-02-18T16_10_43_604Z-debug-0.log
+10 silly logfile done cleaning log files
+11 silly packumentCache heap:964952064 maxSize:241238016 maxEntrySize:120619008
+12 http fetch GET https://registry.npmjs.org/create-vite attempt 1 failed with EAI_AGAIN
+13 http fetch GET https://registry.npmjs.org/create-vite attempt 2 failed with EAI_AGAIN
+14 http fetch GET https://registry.npmjs.org/create-vite attempt 3 failed with EAI_AGAIN
+15 verbose type system
+16 verbose stack FetchError: request to https://registry.npmjs.org/create-vite failed, reason: getaddrinfo EAI_AGAIN registry.npmjs.org
+16 verbose stack     at ClientRequest.<anonymous> (/usr/lib/node_modules/npm/node_modules/minipass-fetch/lib/index.js:130:14)
+16 verbose stack     at ClientRequest.emit (node:events:524:28)
+16 verbose stack     at emitErrorEvent (node:_http_client:101:11)
+16 verbose stack     at _destroy (node:_http_client:884:9)
+16 verbose stack     at onSocketNT (node:_http_client:904:5)
+16 verbose stack     at process.processTicksAndRejections (node:internal/process/task_queues:83:21)
+17 error code EAI_AGAIN
+18 error syscall getaddrinfo
+19 error errno EAI_AGAIN
+20 error request to https://registry.npmjs.org/create-vite failed, reason: getaddrinfo EAI_AGAIN registry.npmjs.org
+21 verbose cwd /home/usuariocodex
+22 verbose os Linux 6.6.87.2-microsoft-standard-WSL2
+23 verbose node v20.20.0
+24 verbose npm  v10.8.2
+25 verbose exit 1
+26 verbose code 1
+27 error A complete log of this run can be found in: /home/usuariocodex/.npm/_logs/2026-02-18T16_10_43_604Z-debug-0.log

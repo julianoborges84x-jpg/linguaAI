@@ -1,0 +1,13 @@
+.env
+.codex/
+.venv/
+pgdata/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.git/
+node_modules/
+dist/
+build/

@@ -1,0 +1,29 @@
+{
+  "passages": [
+    {
+      "id": "ps-23-1",
+      "reference": "Salmos 23:1",
+      "text": "O Senhor é o meu pastor; nada me faltará."
+    },
+    {
+      "id": "jo-3-16",
+      "reference": "João 3:16",
+      "text": "Porque Deus amou o mundo de tal maneira que deu o seu Filho unigênito."
+    },
+    {
+      "id": "pr-3-5",
+      "reference": "Provérbios 3:5",
+      "text": "Confia no Senhor de todo o teu coração e não te estribes no teu próprio entendimento."
+    },
+    {
+      "id": "is-41-10",
+      "reference": "Isaías 41:10",
+      "text": "Não temas, porque eu sou contigo; não te assombres, porque eu sou o teu Deus."
+    },
+    {
+      "id": "mt-11-28",
+      "reference": "Mateus 11:28",
+      "text": "Vinde a mim, todos os que estais cansados e oprimidos, e eu vos aliviarei."
+    }
+  ]
+}

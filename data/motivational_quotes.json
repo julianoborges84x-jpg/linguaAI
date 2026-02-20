@@ -1,0 +1,15 @@
+{
+  "quotes": [
+    {"category": "level_up", "text": "Cada nivel alcançado é prova do seu compromisso."},
+    {"category": "level_up", "text": "Você evoluiu. O próximo passo está mais perto."},
+    {"category": "level_up", "text": "Progresso real: um nivel de cada vez."},
+
+    {"category": "exercise", "text": "Exercicio concluido. Consistencia vence."},
+    {"category": "exercise", "text": "Mais um treino feito. Seu futuro agradece."},
+    {"category": "exercise", "text": "Disciplina diaria cria fluencia."},
+
+    {"category": "streak", "text": "Cinco dias seguidos. Voce criou ritmo."},
+    {"category": "streak", "text": "Sequencia mantida. Continue firme."},
+    {"category": "streak", "text": "Constancia desbloqueia resultados."}
+  ]
+}

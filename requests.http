@@ -1,0 +1,28 @@
+@baseUrl = http://localhost:8000
+@token = COLE_TOKEN_AQUI
+
+### Health
+GET {{baseUrl}}/health
+
+### Criar usuario
+POST {{baseUrl}}/users
+Content-Type: application/json
+
+{
+  "name": "Usuario Teste",
+  "email": "usuario.teste@example.com",
+  "password": "SenhaForte123"
+}
+
+### Login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "usuario.teste@example.com",
+  "password": "SenhaForte123"
+}
+
+### Perfil autenticado
+GET {{baseUrl}}/me
+Authorization: Bearer {{token}}
