@@ -26,6 +26,9 @@ app.add_middleware(
 )
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_hosts)
 
+@app.get("/")
+def root():
+    return {"status": "ok", "service": "LinguaAI"}
 
 @app.on_event("startup")
 def on_startup():
