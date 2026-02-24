@@ -2,24 +2,35 @@ import { ENV } from "../config/env.js";
 import storage from "./storage.js";
 
 async function request(path, options = {}) {
-  const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
-  const token = storage.get("auth_token");
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
+  const url = `${ENV.API_URL}${path.startsWith("/") ? path : `/${path}`}`;
+
+  const headers = {
+    ...(options.headers || {}),
+  };
+
+  // Só seta Content-Type se NÃO for FormData
+  const isFormData = options.body instanceof FormData;
+  if (!isFormData) {
+    headers["Content-Type"] = "application/json";
   }
 
-  const res = await fetch(`${ENV.API_URL}${path}`, {
-    ...options,
-    headers
-  });
+  const token = storage.get("auth_token");
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(url, { ...options, headers });
+
+  // tenta ler json, mas sem quebrar se vier vazio
+  const payload = await res.text();
+  const data = payload ? JSON.parse(payload) : null;
 
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: "Erro inesperado" }));
-    throw new Error(error.detail || "Erro inesperado");
+    const detail =
+      (data && (data.detail || data.message)) ||
+      `Erro HTTP ${res.status}`;
+    throw new Error(detail);
   }
 
-  if (res.status === 204) return null;
-  return res.json();
+  return data;
 }
 
 export default { request };

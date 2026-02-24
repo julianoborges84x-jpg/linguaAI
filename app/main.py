@@ -24,17 +24,29 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_hosts)
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["*"],  # libera todos (resolve 100%)
+)
 
 @app.get("/")
 def root():
     return {"status": "ok", "service": "LinguaAI"}
 
+from sqlalchemy.exc import ProgrammingError
+
 @app.on_event("startup")
 def on_startup():
     if settings.db_auto_create:
         logger.warning("DB_AUTO_CREATE=true: creating all tables on startup")
-        Base.metadata.create_all(bind=engine)
+        try:
+            Base.metadata.create_all(bind=engine)
+        except ProgrammingError as e:
+            msg = str(e).lower()
+            if "already exists" in msg or "duplicatetable" in msg:
+                logger.warning("Tables already exist. Ignoring...")
+            else:
+                raise
     else:
         logger.info("DB_AUTO_CREATE=false: skipping Base.metadata.create_all")
 
