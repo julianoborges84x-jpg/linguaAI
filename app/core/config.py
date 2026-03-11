@@ -56,13 +56,17 @@ class Settings(BaseModel):
 
     # 🔥 CORREÇÃO PRINCIPAL AQUI
     trusted_hosts: list[str] = _parse_list(
-        os.getenv(
-            "TRUSTED_HOSTS",
-            "localhost,127.0.0.1,testserver",
-        ),
-        default=["localhost", "127.0.0.1", "testserver"],
-    )
-
+    os.getenv(
+        "TRUSTED_HOSTS",
+        "localhost,127.0.0.1,testserver,linguaai-2.onrender.com",
+    ),
+    default=[
+        "localhost",
+        "127.0.0.1",
+        "testserver",
+        "linguaai-2.onrender.com",
+    ],
+)
     # DB
     db_auto_create: bool = _parse_bool(os.getenv("DB_AUTO_CREATE"), default=False)
 
