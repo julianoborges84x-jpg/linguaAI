@@ -18,6 +18,10 @@ from app.models import language  # noqa: F401
 from app.models import daily_message  # noqa: F401
 from app.models import motivational_quote  # noqa: F401
 from app.models import motivational_event  # noqa: F401
+from app.models import topic  # noqa: F401
+from app.models import message  # noqa: F401
+from app.models import vocabulary  # noqa: F401
+from app.models import progress  # noqa: F401
 
 config = context.config
 

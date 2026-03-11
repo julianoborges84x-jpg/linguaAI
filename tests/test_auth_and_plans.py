@@ -9,7 +9,7 @@ def register_user(client, name, email, password):
 def login_user(client, email, password):
     return client.post(
         "/auth/login",
-        json={"email": email, "password": password},
+        data={"username": email, "password": password},
     )
 
 
@@ -44,6 +44,7 @@ def test_feature_access_by_plan(client):
 
     res = client.get("/features/speaking", headers=auth_header(token))
     assert res.status_code == 403
+    assert res.json()["detail"] == "Upgrade para PRO para acessar este recurso"
 
     res = client.get("/features/ads", headers=auth_header(token))
     assert res.status_code == 200

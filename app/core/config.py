@@ -21,7 +21,9 @@ def _parse_list(value: str, default: list[str]) -> list[str]:
 class Settings(BaseModel):
     # APP
     app_name: str = "LinguaAI API"
-    app_env: str = os.getenv("APP_ENV", os.getenv("ENVIRONMENT", "dev"))
+    app_env: str = os.getenv("APP_ENV", os.getenv("ENVIRONMENT", "development"))
+    api_url: str = os.getenv("API_URL", "http://127.0.0.1:8000")
+    frontend_url: str = os.getenv("FRONTEND_URL", "http://127.0.0.1:5173")
 
     # DATABASE
     database_url: str = os.getenv(
@@ -43,18 +45,22 @@ class Settings(BaseModel):
     cors_allowed_origins: list[str] = _parse_list(
         os.getenv(
             "CORS_ALLOWED_ORIGINS",
-            "http://localhost:5173,https://*.onrender.com",
+            "http://localhost:5173,http://127.0.0.1:5173",
         ),
-        default=["http://localhost:5173"],
+        default=[
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            os.getenv("FRONTEND_URL", "http://127.0.0.1:5173"),
+        ],
     )
 
     # 🔥 CORREÇÃO PRINCIPAL AQUI
     trusted_hosts: list[str] = _parse_list(
         os.getenv(
             "TRUSTED_HOSTS",
-            "localhost,127.0.0.1,*.onrender.com",
+            "localhost,127.0.0.1,testserver",
         ),
-        default=["localhost", "127.0.0.1", "*.onrender.com"],
+        default=["localhost", "127.0.0.1", "testserver"],
     )
 
     # DB
@@ -68,14 +74,19 @@ class Settings(BaseModel):
     stripe_webhook_secret: str = os.getenv("STRIPE_WEBHOOK_SECRET", "")
     stripe_price_id: str = os.getenv("STRIPE_PRICE_ID", "")
     stripe_success_url: str = os.getenv(
-        "STRIPE_SUCCESS_URL", "http://localhost:5173/dashboard"
+        "STRIPE_SUCCESS_URL", f"{os.getenv('FRONTEND_URL', 'http://127.0.0.1:5173')}/dashboard?checkout=success"
     )
     stripe_cancel_url: str = os.getenv(
-        "STRIPE_CANCEL_URL", "http://localhost:5173/dashboard"
+        "STRIPE_CANCEL_URL", f"{os.getenv('FRONTEND_URL', 'http://127.0.0.1:5173')}/dashboard?checkout=cancel"
     )
     stripe_payment_method_types: str = os.getenv(
         "STRIPE_PAYMENT_METHOD_TYPES", ""
     )
+    stripe_allow_fake_checkout: bool = _parse_bool(
+        os.getenv("STRIPE_ALLOW_FAKE_CHECKOUT"),
+        default=os.getenv("APP_ENV", os.getenv("ENVIRONMENT", "development")).strip().lower() in {"dev", "development", "test"},
+    )
 
+print("DEBUG STRIPE_WEBHOOK_SECRET =", os.getenv("STRIPE_WEBHOOK_SECRET"))
 
 settings = Settings()

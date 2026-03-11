@@ -1,135 +1,171 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy.orm import Session
-import stripe
+from __future__ import annotations
 
-from app.core.config import settings
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from sqlalchemy.orm import Session
+
 from app.core.database import get_db
-from app.core.auth import get_current_user
-from app.models.user import User, PlanEnum
-from app.services.stripe_service import (
-    create_customer,
+from app.core.config import settings
+from app.core.deps import get_current_user
+from app.models.user import User
+from app.services.billing_service import (
+    BillingConfigError,
+    BillingRequestError,
+    cancel_subscription as cancel_subscription_service,
     create_checkout_session,
-    cancel_subscription,
-    create_customer_portal_session,
+    create_portal_session as create_portal_session_service,
+    handle_webhook,
 )
 
-router = APIRouter(prefix="", tags=["billing"])
+router = APIRouter(prefix="/billing", tags=["billing"])
+
+
+def _plan_value(plan) -> str:
+    return plan.value if hasattr(plan, "value") else str(plan)
+
+
+def _set_user_plan(user: User, plan_str: str) -> None:
+    current_plan = getattr(user, "plan", None)
+    if hasattr(current_plan, "value"):
+        enum_type = type(current_plan)
+        try:
+            user.plan = enum_type(plan_str)  # type: ignore[misc]
+            return
+        except Exception:
+            user.plan = plan_str  # type: ignore[assignment]
+            return
+    user.plan = plan_str  # type: ignore[assignment]
+
+
+@router.get("/status")
+def billing_status(user: User = Depends(get_current_user)) -> dict:
+    secret = (settings.stripe_secret_key or "").strip()
+    valid_key = bool(secret) and "*" not in secret and (secret.startswith("sk_test_") or secret.startswith("sk_live_"))
+    configured = bool(valid_key and settings.stripe_price_id)
+    return {
+        "stripe_configured": configured,
+        "plan": _plan_value(getattr(user, "plan", "FREE")),
+        "subscription_status": getattr(user, "subscription_status", None),
+    }
 
 
 @router.post("/create-checkout-session")
-def create_checkout(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    if not settings.stripe_secret_key or not settings.stripe_price_id:
-        raise HTTPException(status_code=500, detail="Stripe not configured")
-
-    if not user.stripe_customer_id:
-        customer_id = create_customer(user.email, user.id, user.name)
-        user.stripe_customer_id = customer_id
-        db.commit()
-        db.refresh(user)
-
-    url = create_checkout_session(user.stripe_customer_id, user.id)
-    return {"checkout_url": url}
-
-
-@router.post("/subscribe")
-def subscribe_alias(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    return create_checkout(db, user)
-
-
-@router.post("/webhook")
-async def webhook(request: Request, db: Session = Depends(get_db)):
-    payload = await request.body()
-    sig_header = request.headers.get("Stripe-Signature", "")
-
-    if not settings.stripe_webhook_secret:
-        raise HTTPException(status_code=500, detail="Stripe webhook not configured")
-
+def create_checkout(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
     try:
-        event = stripe.Webhook.construct_event(
-            payload=payload,
-            sig_header=sig_header,
-            secret=settings.stripe_webhook_secret,
+        payload = create_checkout_session(db, user)
+    except BillingConfigError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except BillingRequestError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    checkout_url = payload.get("checkout_url") or payload.get("url")
+    if not checkout_url:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Checkout URL not returned",
         )
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Webhook error: {exc}")
 
-    event_type = event.get("type")
-    data = event.get("data", {}).get("object", {})
+    return {
+        "checkout_url": checkout_url,
+        "url": checkout_url,
+    }
+@router.post("/create-portal-session")
+def create_portal_session(
+    user: User = Depends(get_current_user),
+) -> dict:
+    try:
+        payload = create_portal_session_service(user)
+    except BillingConfigError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except BillingRequestError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
 
-    if event_type == "checkout.session.completed":
-        customer_id = data.get("customer")
-        subscription_id = data.get("subscription")
-        user_id = data.get("metadata", {}).get("user_id")
-        if not user_id:
-            return {"ok": True}
-        user = db.query(User).filter(User.id == int(user_id)).first()
-        if user:
-            user.plan = PlanEnum.PRO
-            user.stripe_customer_id = customer_id
-            user.stripe_subscription_id = subscription_id
-            user.subscription_status = "active"
-            db.commit()
+    portal_url = payload.get("portal_url") or payload.get("url")
+    if not portal_url:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Portal URL not returned",
+        )
 
-    if event_type in {"customer.subscription.updated", "customer.subscription.deleted"}:
-        subscription_id = data.get("id")
-        customer_id = data.get("customer")
-        status = data.get("status")
-        user_id = data.get("metadata", {}).get("user_id")
+    return {
+        "portal_url": portal_url,
+        "url": portal_url,
+    }
 
-        user = None
-        if user_id:
-            user = db.query(User).filter(User.id == int(user_id)).first()
-        elif subscription_id:
-            user = db.query(User).filter(User.stripe_subscription_id == subscription_id).first()
-        elif customer_id:
-            user = db.query(User).filter(User.stripe_customer_id == customer_id).first()
+@router.post("/fake/confirm")
+def fake_confirm_subscription(
+    user_id: int | None = Query(default=None),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    if not settings.stripe_allow_fake_checkout:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
-        if user:
-            user.stripe_customer_id = customer_id
-            user.stripe_subscription_id = subscription_id
-            user.subscription_status = status
-            if status in {"active", "trialing"}:
-                user.plan = PlanEnum.PRO
-            else:
-                user.plan = PlanEnum.FREE
-            db.commit()
+    target_user_id = user_id if user_id is not None else user.id
 
-    if event_type == "invoice.paid":
-        subscription_id = data.get("subscription")
-        customer_id = data.get("customer")
-        user = None
-        if subscription_id:
-            user = db.query(User).filter(User.stripe_subscription_id == subscription_id).first()
-        elif customer_id:
-            user = db.query(User).filter(User.stripe_customer_id == customer_id).first()
-        if user:
-            user.plan = PlanEnum.PRO
-            user.subscription_status = "active"
-            db.commit()
+    if user_id is not None and user_id != user.id:
+        raise HTTPException(status_code=403, detail="user_id nao confere com o usuario logado")
 
-    return {"ok": True}
+    db_user = db.query(User).filter(User.id == target_user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    _set_user_plan(db_user, "PRO")
+    if hasattr(db_user, "subscription_status"):
+        setattr(db_user, "subscription_status", "active")
+
+    db.commit()
+    db.refresh(db_user)
+
+    return {
+        "success": True,
+        "user_id": db_user.id,
+        "plan": _plan_value(db_user.plan),
+        "subscription_status": getattr(db_user, "subscription_status", None),
+    }
 
 
 @router.post("/cancel-subscription")
-def cancel_subscribe(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    if not settings.stripe_secret_key:
-        raise HTTPException(status_code=500, detail="Stripe not configured")
-    if not user.stripe_subscription_id:
-        raise HTTPException(status_code=400, detail="No active subscription")
+def cancel_subscription(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    try:
+        result = cancel_subscription_service(db, user)
+    except BillingConfigError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    except BillingRequestError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return result
 
-    cancel_subscription(user.stripe_subscription_id)
-    user.plan = PlanEnum.FREE
-    user.subscription_status = "canceled"
-    db.commit()
-    return {"ok": True}
 
+@router.post("/webhook")
+async def billing_webhook(
+    request: Request,
+    stripe_signature: str | None = Header(default=None, alias="Stripe-Signature"),
+    db: Session = Depends(get_db),
+) -> dict:
+    if not stripe_signature:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing Stripe-Signature header")
 
-@router.post("/customer-portal")
-def customer_portal(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    if not settings.stripe_secret_key:
-        raise HTTPException(status_code=500, detail="Stripe not configured")
-    if not user.stripe_customer_id:
-        raise HTTPException(status_code=400, detail="No Stripe customer")
-
-    url = create_customer_portal_session(user.stripe_customer_id)
-    return {"portal_url": url}
+    payload = await request.body()
+    try:
+        return handle_webhook(db=db, payload=payload, sig_header=stripe_signature)
+    except BillingConfigError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    except BillingRequestError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

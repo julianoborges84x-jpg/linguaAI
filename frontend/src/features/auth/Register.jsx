@@ -16,7 +16,7 @@ export default function Register() {
     setError("");
     setLoading(true);
     try {
-      await register(form);
+      await register({name: form.name, email: form.email,password: form.password });
       navigate("/login");
     } catch (err) {
       setError(err.message || "Falha ao cadastrar");
@@ -71,6 +71,9 @@ export default function Register() {
 
           <p className="text-sm text-slate-600 mt-6">
             Já tem conta? <Link to="/login" className="text-ink font-medium">Entrar</Link>
+          </p>
+          <p className="mt-3 text-xs text-slate-500">
+            Ao criar conta, voce concorda com os <Link to="/termos" className="underline">Termos</Link> e a <Link to="/privacidade" className="underline">Politica de Privacidade</Link>.
           </p>
         </Card>
       </div>

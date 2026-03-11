@@ -1,17 +1,18 @@
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.ai import require_openai_api_key
-from app.core.auth import get_current_user
+from app.core.deps import get_current_user
 from app.core.database import get_db
 from app.models.history import LearningHistory
 from app.models.language import Language
 from app.models.user import PlanEnum, User
 from app.schemas.mentor import MentorChatIn, MentorChatOut, MentorDetectIn, MentorDetectOut
-from app.services.llm_client import detect_language, generate_reply
+from app.services import llm_client
 
 router = APIRouter(prefix="/mentor", tags=["mentor"])
 
@@ -143,7 +144,11 @@ def detect_base_language(
     if not sample_text:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Text is required")
 
-    iso_code = detect_language(sample_text)
+    try:
+        iso_code = llm_client.detect_language(sample_text)
+    except httpx.HTTPError:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="LLM service unavailable")
+
     lang = db.query(Language).filter(Language.iso_code == iso_code).first()
     if not lang:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Detected language not supported")
@@ -161,8 +166,11 @@ def chat(
 ):
     require_openai_api_key()
 
-    if user.plan == PlanEnum.FREE and payload.feature != "writing":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Plan not allowed")
+    if user.plan == PlanEnum.FREE and payload.feature in {"speaking", "dialect", "fillers"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Upgrade para PRO para acessar este recurso",
+        )
 
     target_language = language_context(db, user.target_language_code)
     base_language = language_context(db, user.base_language_code)
@@ -176,7 +184,10 @@ def chat(
     if history_text:
         input_text = f"Historico:\n{history_text}\n\nMensagem atual:\n{payload.message}"
 
-    reply = generate_reply(instructions, input_text)
+    try:
+        reply = llm_client.generate_reply(instructions, input_text)
+    except httpx.HTTPError:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="LLM service unavailable")
 
     db.add(LearningHistory(user_id=user.id, role="user", content=payload.message, feature=payload.feature))
     db.add(LearningHistory(user_id=user.id, role="assistant", content=reply, feature=payload.feature))

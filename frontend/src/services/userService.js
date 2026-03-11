@@ -1,15 +1,32 @@
-import apiClient from "../core/apiClient.js";
-import { getUserIdFromToken } from "./authService.js";
+import api from "../core/apiClient.js";
 
+// Perfil do usuário logado
 export async function getCurrentUser() {
-  const id = getUserIdFromToken();
-  if (!id) return null;
-  return apiClient.request(`/users/${id}`);
+  return await api.request("/users/me", { method: "GET" });
 }
 
-export async function updateUser(id, payload) {
-  return apiClient.request(`/users/${id}`, {
+// Atualizar dados do usuário logado
+export async function updateUser(payload) {
+  return await api.request("/users/me", {
     method: "PATCH",
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getUserPreferences() {
+  return await api.request("/users/preferences", { method: "GET" });
+}
+
+export async function updateUserPreferences(payload) {
+  return await api.request("/users/preferences", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function completeOnboarding(payload) {
+  return await api.request("/users/me", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
   });
 }

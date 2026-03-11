@@ -13,7 +13,7 @@ def register_user(client, name, email, password):
 def login_user(client, email, password):
     return client.post(
         "/auth/login",
-        json={"email": email, "password": password},
+        data={"username": email, "password": password},
     )
 
 

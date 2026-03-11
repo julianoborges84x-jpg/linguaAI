@@ -60,7 +60,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         allowed_plans = FEATURE_RULES.get(path)
         if allowed_plans is not None and user.plan.value not in allowed_plans:
-            return JSONResponse(status_code=403, content={"detail": "Plan not allowed"})
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Upgrade para PRO para acessar este recurso"},
+            )
 
         request.state.user = user
         return await call_next(request)

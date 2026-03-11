@@ -1,20 +1,11 @@
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field
 from typing import Literal
 
 
 class UserCreate(BaseModel):
-    name: str = Field(min_length=2, max_length=120)
+    name: str
     email: EmailStr
     password: str
-
-    @field_validator("password")
-    @classmethod
-    def validate_password_length(cls, value: str) -> str:
-        if value is None or value == "":
-            raise ValueError("Password must not be empty.")
-        if len(value) < 8:
-            raise ValueError("Password must be at least 8 characters.")
-        return value
 
 
 class UserOut(BaseModel):
@@ -22,8 +13,12 @@ class UserOut(BaseModel):
     name: str
     email: EmailStr
     plan: Literal["FREE", "PRO"]
+    xp_total: int
     level: int
     timezone: str
+    onboarding_completed: bool
+    target_language: str | None = None
+    language: str | None = None
     target_language_code: str | None = None
     base_language_code: str | None = None
     subscription_status: str | None = None
@@ -34,7 +29,20 @@ class UserOut(BaseModel):
 
 class UserUpdate(BaseModel):
     plan: Literal["FREE", "PRO"] | None = None
-    level: int | None = Field(default=None, ge=0, le=10)
-    timezone: str | None = Field(default=None, min_length=1, max_length=64)
+    level: int | None = None
+    timezone: str | None = None
+    target_language: str | None = None
+    language: str | None = None
     target_language_code: str | None = None
     base_language_code: str | None = None
+
+
+class UserPreferencesOut(BaseModel):
+    target_language_code: str | None = None
+    timezone: str
+    onboarding_completed: bool
+
+
+class UserPreferencesUpdate(BaseModel):
+    target_language_code: str = Field(min_length=2, max_length=8)
+    timezone: str = Field(min_length=1, max_length=64)

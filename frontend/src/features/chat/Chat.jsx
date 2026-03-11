@@ -1,18 +1,46 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import PageShell from "../../shared/layouts/PageShell.jsx";
 import NavBar from "../../shared/components/NavBar.jsx";
 import AdsPanel from "../../shared/components/AdsPanel.jsx";
 import Button from "../../shared/ui/Button.jsx";
-import { useAuth } from "../../hooks/useAuth.js";
-import { chatMentor, detectBaseLanguage } from "../../services/mentorService.js";
+import { useAuth } from "../../hooks/useAuth.jsx";
+import { subscribePro } from "../../services/billingService.js";
+import { finishStudySession, sendChatMessage, startStudySession } from "../../services/learnaService.js";
 
 export default function Chat() {
-  const { user, logout } = useAuth();
+
+  const { user, logout, isPro } = useAuth();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
-  const [feature, setFeature] = useState("writing");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const sessionIdRef = useRef(null);
+  const interactionsRef = useRef(0);
+
+  useEffect(() => {
+    if (!user || !isPro) return undefined;
+    let isMounted = true;
+
+    (async () => {
+      try {
+        const started = await startStudySession("chat");
+        if (isMounted) {
+          sessionIdRef.current = started?.session_id || null;
+        }
+      } catch (err) {
+        if (isMounted) {
+          setError(err.message || "Erro ao iniciar sessão");
+        }
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+      if (sessionIdRef.current) {
+        finishStudySession(sessionIdRef.current, interactionsRef.current).catch(() => {});
+      }
+    };
+  }, [user, isPro]);
 
   const sendMessage = async () => {
     if (!input.trim() || !user) return;
@@ -23,14 +51,10 @@ export default function Chat() {
     setError("");
 
     try {
-      const response = await chatMentor(payload, feature);
-      setMessages((prev) => [...prev, { role: "assistant", content: response.reply }]);
-      if (response.ads?.length) {
-        setMessages((prev) => [
-          ...prev,
-          { role: "ads", content: response.ads.join(" ") }
-        ]);
-      }
+      const response = await sendChatMessage(payload);
+      interactionsRef.current += 1;
+      const content = `${response.correction}\n\n${response.explanation}\n\nVersão correta: ${response.corrected_text}`;
+      setMessages((prev) => [...prev, { role: "assistant", content }]);
     } catch (err) {
       setError(err.message || "Erro ao enviar");
     } finally {
@@ -38,16 +62,20 @@ export default function Chat() {
     }
   };
 
-  const handleDetect = async () => {
-    if (!input.trim()) return;
+  if (!user) return null;
+
+  const handleSubscribe = async () => {
     try {
-      await detectBaseLanguage(input);
+      const data = await subscribePro();
+      if (data?.checkout_url) {
+        window.location.assign(data.checkout_url);
+      } else {
+        throw new Error("Checkout indisponível no momento.");
+      }
     } catch (err) {
-      setError(err.message || "Falha ao detectar idioma");
+      setError(err.message || "Não foi possível iniciar assinatura PRO");
     }
   };
-
-  if (!user) return null;
 
   return (
     <PageShell>
@@ -57,18 +85,15 @@ export default function Chat() {
       <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
         <section className="glass-card rounded-2xl p-6 shadow-soft flex flex-col gap-4">
           <div className="flex items-center justify-between">
-            <h2 className="font-display text-2xl">MentorLingua ao vivo</h2>
-            <select
-              value={feature}
-              onChange={(e) => setFeature(e.target.value)}
-              className="rounded-full border border-slate-200 px-3 py-2 text-sm"
-            >
-              <option value="writing">Escrita</option>
-              <option value="speaking">Conversação</option>
-              <option value="dialect">Dialeto</option>
-              <option value="fillers">Vícios de linguagem</option>
-            </select>
+            <h2 className="font-display text-2xl">IA de Correção em tempo real</h2>
           </div>
+          {!isPro && (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900">
+              <p className="font-medium">Recurso PRO</p>
+              <p className="mt-1 text-sm">Upgrade para PRO para acessar este recurso</p>
+              <Button className="mt-3" onClick={handleSubscribe}>Assinar PRO</Button>
+            </div>
+          )}
 
           <div className="flex-1 overflow-y-auto space-y-4 max-h-[50vh]">
             {messages.length === 0 && (
@@ -98,13 +123,11 @@ export default function Chat() {
               placeholder="Escreva aqui..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              disabled={!isPro}
             />
             <div className="flex flex-wrap gap-3">
-              <Button onClick={sendMessage} disabled={loading}>
+              <Button onClick={sendMessage} disabled={loading || !isPro}>
                 {loading ? "Enviando..." : "Enviar"}
-              </Button>
-              <Button variant="secondary" onClick={handleDetect}>
-                Detectar idioma base
               </Button>
             </div>
           </div>
@@ -114,9 +137,7 @@ export default function Chat() {
           <section className="glass-card rounded-2xl p-6 shadow-soft">
             <h3 className="font-display text-xl">Seu plano</h3>
             <p className="text-slate-600 mt-2">
-              {user.plan === "FREE"
-                ? "Você está no plano FREE. Conversação e dialeto exigem PRO."
-                : "Plano PRO ativo. Aproveite sem anúncios."}
+              Receba correção, explicação e versão correta para evoluir diariamente.
             </p>
           </section>
 

@@ -1,40 +1,50 @@
-import apiClient from "../core/apiClient.js";
+import api from "../core/apiClient.js";
 import storage from "../core/storage.js";
 
-function parseUserId(token) {
-  try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    return payload.sub;
-  } catch {
-    return null;
-  }
+const TOKEN_KEY = "auth_token";
+
+export function getToken() {
+  return storage.get(TOKEN_KEY);
 }
 
-export async function login(email, password) {
-  const data = await apiClient.request("/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password })
-  });
-  storage.set("auth_token", data.access_token);
-  return data;
-}
-
-export async function register(payload) {
-  return apiClient.request("/users", {
-    method: "POST",
-    body: JSON.stringify(payload)
-  });
+export function setToken(token) {
+  storage.set(TOKEN_KEY, token);
 }
 
 export function logout() {
-  storage.remove("auth_token");
+  storage.remove(TOKEN_KEY);
 }
 
-export function getToken() {
-  return storage.get("auth_token");
+export async function login(email, password) {
+  // backend: POST /auth/login (OAuth2 form)
+  const body = new URLSearchParams();
+  body.set("username", email);
+  body.set("password", password);
+
+  const data = await api.request("/auth/login", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body,
+  });
+
+  // aceita formatos comuns:
+  const token = data?.access_token || data?.token || data?.jwt;
+  if (!token) throw new Error("Login não retornou token.");
+
+  setToken(token);
+  return data;
 }
 
-export function getUserIdFromToken() {
-  const token = storage.get("auth_token");
-  return token ? parseUserId(token) : null;
+export async function register({ name, email, password }) {
+  // backend: POST /users
+  const payload = { name, email, password };
+
+  const data = await api.request("/users", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+  return data;
 }

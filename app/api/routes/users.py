@@ -1,24 +1,102 @@
+import re
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import hash_password, get_current_user
+from app.core.security import hash_password
+from app.core.deps import get_current_user
 from app.models.user import User, PlanEnum
 from app.models.language import Language
-from app.schemas.user import UserCreate, UserOut, UserUpdate
+from app.schemas.user import UserCreate, UserOut, UserPreferencesOut, UserPreferencesUpdate, UserUpdate
+from app.schemas.user_preferences import UserPreferencesUpdate as OnboardingPreferencesUpdate
 
 router = APIRouter(prefix="/users", tags=["users"])
+LANGUAGE_CODE_PATTERN = re.compile(r"^[a-z]{2,3}$")
 
 
-def validate_language_code(db: Session, code: str | None) -> None:
+def validate_language_code(code: str | None) -> str | None:
     if code is None:
-        return
-    exists = db.query(Language.iso_code).filter(Language.iso_code == code).first()
-    if not exists:
+        return None
+
+    normalized = code.strip().lower()
+    if not normalized:
+        return None
+    if not LANGUAGE_CODE_PATTERN.match(normalized):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid language code",
+            detail="Invalid language code.",
         )
+    return normalized
+
+
+def validate_timezone(tz_name: str | None) -> str | None:
+    if tz_name is None:
+        return None
+    normalized = tz_name.strip()
+    if not normalized:
+        return None
+    try:
+        ZoneInfo(normalized)
+    except ZoneInfoNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid timezone. Use IANA timezone (e.g. 'America/Sao_Paulo').",
+        )
+    return normalized
+
+
+def ensure_language_exists(db: Session, code: str) -> None:
+    existing = db.query(Language.iso_code).filter(Language.iso_code == code).first()
+    if existing:
+        return
+    db.add(
+        Language(
+            iso_code=code,
+            name=code.upper(),
+            region="Unknown",
+            family="Unknown",
+        )
+    )
+
+
+def apply_user_update(user: User, payload: UserUpdate, db: Session) -> None:
+    if payload.plan is not None:
+        user.plan = PlanEnum(payload.plan)
+    if payload.level is not None:
+        user.level = payload.level
+    if payload.timezone is not None:
+        user.timezone = validate_timezone(payload.timezone) or "America/Sao_Paulo"
+
+    effective_target = payload.target_language
+    if effective_target is None:
+        effective_target = payload.target_language_code
+    if effective_target is None:
+        effective_target = payload.language
+    target_code = validate_language_code(effective_target)
+    base_code = validate_language_code(payload.base_language_code)
+    if target_code:
+        ensure_language_exists(db, target_code)
+    if base_code:
+        ensure_language_exists(db, base_code)
+
+    if effective_target is not None:
+        user.target_language = target_code
+        user.target_language_code = target_code
+    if payload.base_language_code is not None:
+        user.base_language_code = base_code
+
+
+def _normalize_with_length(value: str, min_len: int, max_len: int, field_name: str) -> str:
+    normalized = value.strip()
+    if len(normalized) < min_len or len(normalized) > max_len:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{field_name} must be between {min_len} and {max_len} characters.",
+        )
+    return normalized
 
 
 @router.post("", response_model=UserOut, status_code=status.HTTP_201_CREATED)
@@ -27,10 +105,7 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
-    try:
-        password_hash = hash_password(payload.password)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    password_hash = hash_password(payload.password)
 
     user = User(
         name=payload.name,
@@ -38,6 +113,7 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
         password_hash=password_hash,
         plan=PlanEnum.FREE,
         level=0,
+        onboarding_completed=False,
     )
     db.add(user)
     db.commit()
@@ -45,9 +121,83 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     return user
 
 
-@router.get("/me")
+@router.get("/me", response_model=UserOut)
 def me(current=Depends(get_current_user)):
     return current
+
+
+@router.patch("/me", response_model=UserOut)
+def update_me(
+    payload: OnboardingPreferencesUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    normalized_timezone = payload.timezone.strip()
+    if not normalized_timezone:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="timezone cannot be empty.",
+        )
+
+    ensure_language_exists(db, payload.target_language)
+    current_user.target_language = payload.target_language
+    current_user.target_language_code = payload.target_language
+    current_user.timezone = normalized_timezone
+    current_user.onboarding_completed = True
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid user update payload")
+    db.refresh(current_user)
+    return current_user
+
+
+@router.patch("/me/onboarding", response_model=UserOut)
+def complete_onboarding(
+    payload: OnboardingPreferencesUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return update_me(payload, db, current_user)
+
+
+@router.get("/preferences", response_model=UserPreferencesOut)
+def get_preferences(current_user: User = Depends(get_current_user)):
+    return UserPreferencesOut(
+        target_language_code=current_user.target_language_code,
+        timezone=current_user.timezone,
+        onboarding_completed=current_user.onboarding_completed,
+    )
+
+
+@router.put("/preferences", response_model=UserPreferencesOut)
+def update_preferences(
+    payload: UserPreferencesUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    current_user.target_language_code = _normalize_with_length(
+        payload.target_language_code.lower(),
+        2,
+        8,
+        "target_language_code",
+    )
+    current_user.timezone = _normalize_with_length(
+        payload.timezone,
+        1,
+        64,
+        "timezone",
+    )
+    current_user.onboarding_completed = True
+
+    db.commit()
+    db.refresh(current_user)
+    return UserPreferencesOut(
+        target_language_code=current_user.target_language_code,
+        timezone=current_user.timezone,
+        onboarding_completed=current_user.onboarding_completed,
+    )
 
 
 @router.get("/{user_id}", response_model=UserOut)
@@ -64,21 +214,11 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    if payload.plan is not None:
-        user.plan = PlanEnum(payload.plan)
-    if payload.level is not None:
-        user.level = payload.level
-    if payload.timezone is not None:
-        user.timezone = payload.timezone
-
-    validate_language_code(db, payload.target_language_code)
-    validate_language_code(db, payload.base_language_code)
-
-    if payload.target_language_code is not None:
-        user.target_language_code = payload.target_language_code
-    if payload.base_language_code is not None:
-        user.base_language_code = payload.base_language_code
-
-    db.commit()
+    apply_user_update(user, payload, db)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid user update payload")
     db.refresh(user)
     return user

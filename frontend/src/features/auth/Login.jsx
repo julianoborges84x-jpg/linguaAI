@@ -1,12 +1,15 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { login } from "../../services/authService.js";
+import { getCurrentUser } from "../../services/userService.js";
+import { useAuth } from "../../hooks/useAuth.jsx";
 import Button from "../../shared/ui/Button.jsx";
 import Input from "../../shared/ui/Input.jsx";
 import Card from "../../shared/ui/Card.jsx";
 
 export default function Login() {
   const navigate = useNavigate();
+  const { setUser } = useAuth();
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -17,7 +20,13 @@ export default function Login() {
     setLoading(true);
     try {
       await login(form.email, form.password);
-      navigate("/dashboard");
+      const profile = await getCurrentUser();
+      setUser(profile);
+      if (profile?.onboarding_completed || profile?.target_language || profile?.target_language_code) {
+        navigate("/dashboard");
+      } else {
+        navigate("/onboarding");
+      }
     } catch (err) {
       setError(err.message || "Falha ao entrar");
     } finally {
@@ -64,6 +73,9 @@ export default function Login() {
 
           <p className="text-sm text-slate-600 mt-6">
             Ainda não tem conta? <Link to="/register" className="text-ink font-medium">Criar conta</Link>
+          </p>
+          <p className="mt-3 text-xs text-slate-500">
+            Ao continuar, voce concorda com os <Link to="/termos" className="underline">Termos</Link> e a <Link to="/privacidade" className="underline">Politica de Privacidade</Link>.
           </p>
         </Card>
       </div>

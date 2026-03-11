@@ -6,6 +6,8 @@ from .languages import router as languages
 from .daily_messages import router as daily_messages
 from .motivation import router as motivation
 from .billing import router as billing
+from .learna import router as learna
+from .sessions import router as sessions
 
 __all__ = [
     "auth",
@@ -16,4 +18,6 @@ __all__ = [
     "daily_messages",
     "motivation",
     "billing",
+    "learna",
+    "sessions",
 ]

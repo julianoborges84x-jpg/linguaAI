@@ -1,10 +1,13 @@
 import stripe
 from app.core.config import settings
 
-stripe.api_key = settings.stripe_secret_key
+
+def _configure_stripe() -> None:
+    stripe.api_key = settings.stripe_secret_key
 
 
 def create_customer(email: str, user_id: int, name: str | None = None) -> str:
+    _configure_stripe()
     customer = stripe.Customer.create(
         email=email,
         name=name,
@@ -14,6 +17,7 @@ def create_customer(email: str, user_id: int, name: str | None = None) -> str:
 
 
 def create_checkout_session(customer_id: str, user_id: int) -> str:
+    _configure_stripe()
     payment_method_types = None
     if settings.stripe_payment_method_types:
         payment_method_types = [m.strip() for m in settings.stripe_payment_method_types.split(",") if m.strip()]
@@ -35,10 +39,12 @@ def create_checkout_session(customer_id: str, user_id: int) -> str:
 
 
 def cancel_subscription(subscription_id: str) -> None:
+    _configure_stripe()
     stripe.Subscription.delete(subscription_id)
 
 
 def create_customer_portal_session(customer_id: str) -> str:
+    _configure_stripe()
     session = stripe.billing_portal.Session.create(
         customer=customer_id,
         return_url=settings.stripe_success_url,

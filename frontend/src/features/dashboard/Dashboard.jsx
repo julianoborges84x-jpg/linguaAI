@@ -8,11 +8,9 @@ import HistoryList from "../../shared/components/HistoryList.jsx";
 import StreakBadge from "../../shared/components/StreakBadge.jsx";
 import Card from "../../shared/ui/Card.jsx";
 import Button from "../../shared/ui/Button.jsx";
-import Input from "../../shared/ui/Input.jsx";
-import { useAuth } from "../../hooks/useAuth.js";
+import { useAuth } from "../../hooks/useAuth.jsx";
 import {
   getCurrentUser,
-  updateUser
 } from "../../services/userService.js";
 import {
   getDailyMessage,
@@ -22,11 +20,14 @@ import {
   getMentorHistory,
   getWeeklyProgress
 } from "../../services/mentorService.js";
+import { getProgressSummary } from "../../services/learnaService.js";
 import {
+  getBillingStatus,
   subscribePro,
   cancelSubscription,
   openCustomerPortal
 } from "../../services/billingService.js";
+import { startProCheckout } from "./checkoutFlow.js";
 
 export default function Dashboard() {
   const { user, setUser, logout } = useAuth();
@@ -34,20 +35,18 @@ export default function Dashboard() {
   const [history, setHistory] = useState([]);
   const [streak, setStreak] = useState(null);
   const [progress, setProgress] = useState([]);
+  const [summary, setSummary] = useState({ xp_total: 0, level: 0, streak_days: 0, weekly_minutes: 0 });
   const [error, setError] = useState("");
-  const [settings, setSettings] = useState({ target_language_code: "", timezone: "" });
   const [billingLoading, setBillingLoading] = useState(false);
+  const [billingStatus, setBillingStatus] = useState({ stripe_configured: false, plan: "FREE", subscription_status: null });
 
   useEffect(() => {
     (async () => {
       try {
+        setError("");
         const profile = await getCurrentUser();
         if (profile) {
           setUser(profile);
-          setSettings({
-            target_language_code: profile.target_language_code || "",
-            timezone: profile.timezone || "UTC"
-          });
         }
 
         const todayKey = new Date().toISOString().slice(0, 10);
@@ -64,39 +63,40 @@ export default function Dashboard() {
         setStreak(streakData?.streak || 0);
         const progressData = await getWeeklyProgress();
         setProgress(progressData || []);
+        const summaryData = await getProgressSummary();
+        setSummary(summaryData || { xp_total: 0, level: profile?.level || 0, streak_days: 0, weekly_minutes: 0 });
+
+        const billing = await getBillingStatus();
+        setBillingStatus(
+          billing || {
+            stripe_configured: false,
+            plan: profile?.plan || "FREE",
+            subscription_status: profile?.subscription_status || null,
+          }
+        );
       } catch (err) {
         setError(err.message || "Erro ao carregar");
       }
     })();
   }, [setUser]);
 
-  const onSaveSettings = async (e) => {
-    e.preventDefault();
-    if (!user) return;
-    try {
-      const updated = await updateUser(user.id, {
-        target_language_code: settings.target_language_code || null,
-        timezone: settings.timezone || "UTC"
-      });
-      setUser(updated);
-    } catch (err) {
-      setError(err.message || "Falha ao salvar");
-    }
-  };
+const handleSubscribe = async () => {
+  setBillingLoading(true);
+  try {
+    const data = await subscribePro();
+    const url = data?.checkout_url || data?.url;
 
-  const handleSubscribe = async () => {
-    setBillingLoading(true);
-    try {
-      const { checkout_url } = await subscribePro();
-      if (checkout_url) {
-        window.location.href = checkout_url;
-      }
-    } catch (err) {
-      setError(err.message || "Falha ao iniciar assinatura");
-    } finally {
-      setBillingLoading(false);
+    if (url) {
+      window.location.href = url;
+    } else {
+      setError("Checkout indisponível no momento.");
     }
-  };
+  } catch (err) {
+    setError(err.message || "Checkout indisponível no momento.");
+  } finally {
+    setBillingLoading(false);
+  }
+};
 
   const handleCancel = async () => {
     setBillingLoading(true);
@@ -104,28 +104,43 @@ export default function Dashboard() {
       await cancelSubscription();
       const refreshed = await getCurrentUser();
       setUser(refreshed);
+      const billing = await getBillingStatus();
+      setBillingStatus(
+        billing || {
+          stripe_configured: false,
+          plan: refreshed?.plan || "FREE",
+          subscription_status: refreshed?.subscription_status || null,
+        }
+      );
     } catch (err) {
-      setError(err.message || "Falha ao cancelar assinatura");
+      setError(err.message || "Stripe não configurado para cancelamento");
     } finally {
       setBillingLoading(false);
     }
   };
 
-  const handlePortal = async () => {
-    setBillingLoading(true);
-    try {
-      const { portal_url } = await openCustomerPortal();
-      if (portal_url) {
-        window.location.href = portal_url;
-      }
-    } catch (err) {
-      setError(err.message || "Falha ao abrir portal");
-    } finally {
-      setBillingLoading(false);
+const handlePortal = async () => {
+  setBillingLoading(true);
+  try {
+    const data = await openCustomerPortal();
+    const url = data?.portal_url || data?.url;
+
+    if (url) {
+      window.location.href = url;
+    } else {
+      setError("Portal indisponível no momento.");
     }
-  };
+  } catch (err) {
+    setError(err.message || "Portal indisponível no momento.");
+  } finally {
+    setBillingLoading(false);
+  }
+};
 
   if (!user) return null;
+  const currentPlan = billingStatus.plan || user.plan || "FREE";
+  const chosenLanguage = user.target_language || user.language || user.target_language_code;
+  const currentLevel = Math.max(Number(user.level || 0), Number(summary.level || 0));
 
   const progressData = progress.map((item) => ({
     label: item.label,
@@ -143,11 +158,12 @@ export default function Dashboard() {
             <p className="text-xs uppercase tracking-[0.2em] text-lagoon">Seu painel</p>
             <h2 className="font-display text-3xl mt-2">Olá, {user.name}</h2>
             <p className="text-slate-600 mt-2">
-              Plano {user.plan} · Nível {user.level}
+              Plano {currentPlan} · Nivel {currentLevel}
             </p>
+            <p className="text-slate-600 mt-1">XP total: {summary.xp_total}</p>
           </Card>
 
-          <StreakBadge streak={streak} />
+          <StreakBadge streak={streak ?? summary.streak_days} />
           <DailyMessage message={dailyMessage} />
 
           <Card>
@@ -166,29 +182,19 @@ export default function Dashboard() {
 
         <div className="space-y-6">
           <Card>
-            <h3 className="font-display text-xl">Configurações rápidas</h3>
-            <form onSubmit={onSaveSettings} className="mt-4 space-y-4">
-              <Input
-                label="Idioma alvo (ISO 639-3)"
-                value={settings.target_language_code}
-                onChange={(e) => setSettings({ ...settings, target_language_code: e.target.value })}
-                placeholder="por"
-              />
-              <Input
-                label="Fuso horário"
-                value={settings.timezone}
-                onChange={(e) => setSettings({ ...settings, timezone: e.target.value })}
-                placeholder="America/Sao_Paulo"
-              />
-              <Button type="submit">Salvar</Button>
-            </form>
+            <h3 className="font-display text-xl">Preferências</h3>
+            <p className="text-slate-600 mt-2">Idioma alvo: {chosenLanguage || "não definido"}</p>
+            <p className="text-slate-600 mt-1">Fuso horário: {user.timezone}</p>
           </Card>
 
           <Card>
             <h3 className="font-display text-xl">Assinatura PRO</h3>
-            <p className="text-slate-600 mt-2">Status Stripe: {user.subscription_status || "não configurado"}</p>
-            {user.plan === "FREE" ? (
-              <Button className="mt-4" onClick={handleSubscribe} disabled={billingLoading}>
+            <p className="text-slate-600 mt-2">
+              Stripe: {billingStatus.stripe_configured ? "configurado" : "não configurado"}
+            </p>
+            <p className="text-slate-600 mt-1">Status assinatura: {billingStatus.subscription_status || user.subscription_status || "nenhuma"}</p>
+            {currentPlan === "FREE" ? (
+              <Button type="button" className="mt-4" onClick={handleSubscribe} disabled={billingLoading}>
                 {billingLoading ? "Abrindo..." : "Assinar PRO"}
               </Button>
             ) : (
@@ -203,7 +209,7 @@ export default function Dashboard() {
             )}
           </Card>
 
-          <AdsPanel visible={user.plan === "FREE"} placement="home" />
+          <AdsPanel visible={currentPlan === "FREE"} placement="home" />
         </div>
       </div>
     </PageShell>
