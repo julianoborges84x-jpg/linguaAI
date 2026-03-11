@@ -6,7 +6,7 @@ typing-extensions>=4.10.0
 
 sqlalchemy>=2.0.29
 alembic>=1.13.1
-psycopg2-binary>=2.9.9
+psycopg[binary]>=3.1.18
 
 pydantic>=2.6.4
 pydantic-settings>=2.2.1
