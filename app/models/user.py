@@ -21,6 +21,8 @@ class User(Base):
     level: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     target_language: Mapped[str | None] = mapped_column(String(8), nullable=True)
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="America/Sao_Paulo")
+    is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    verification_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
