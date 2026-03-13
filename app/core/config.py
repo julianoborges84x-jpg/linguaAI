@@ -30,6 +30,11 @@ class Settings(BaseModel):
         "DATABASE_URL",
         "postgresql+psycopg://postgres:postgres@localhost:5433/mentorlingua",
     )
+    smtp_host: str = os.getenv("SMTP_HOST")
+    smtp_port: int = int(os.getenv("SMTP_PORT", 587))
+    smtp_user: str = os.getenv("SMTP_USER")
+    smtp_password: str = os.getenv("SMTP_PASSWORD")
+    email_from: str = os.getenv("EMAIL_FROM")
 
     # JWT
     jwt_secret: str = os.getenv("JWT_SECRET", "change-me-in-dev")
