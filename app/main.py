@@ -62,12 +62,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(AuthMiddleware)
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=settings.effective_trusted_hosts if settings.trusted_hosts else ["*"],
+    allowed_hosts=["*"],
 )
-
 
 @app.get("/")
 def root():
