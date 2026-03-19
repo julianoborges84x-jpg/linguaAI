@@ -15,6 +15,7 @@ from app.services.billing_service import (
     create_portal_session as create_portal_session_service,
     handle_webhook,
 )
+from app.services.analytics_service import track_event
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -127,6 +128,7 @@ def fake_confirm_subscription(
     _set_user_plan(db_user, "PRO")
     if hasattr(db_user, "subscription_status"):
         setattr(db_user, "subscription_status", "active")
+    track_event(db, "pro_checkout_completed", user_id=db_user.id, payload={"mode": "fake"})
 
     db.commit()
     db.refresh(db_user)

@@ -22,6 +22,8 @@ from app.models import topic  # noqa: F401
 from app.models import message  # noqa: F401
 from app.models import vocabulary  # noqa: F401
 from app.models import progress  # noqa: F401
+from app.models import daily_mission  # noqa: F401
+from app.models import analytics_event  # noqa: F401
 
 config = context.config
 

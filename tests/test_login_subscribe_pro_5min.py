@@ -46,7 +46,7 @@ def test_login_subscribe_pro_and_use_for_5_minutes(client, db_session, monkeypat
     monkeypatch.setattr("stripe.Webhook.construct_event", fake_construct_event)
     monkeypatch.setattr(settings, "stripe_webhook_secret", "whsec_test")
 
-    webhook = client.post("/billing/webhook", data="{}", headers={"Stripe-Signature": "t"})
+    webhook = client.post("/billing/webhook", content="{}", headers={"Stripe-Signature": "t"})
     assert webhook.status_code == 200
 
     me_after_webhook = client.get("/users/me", headers=headers)

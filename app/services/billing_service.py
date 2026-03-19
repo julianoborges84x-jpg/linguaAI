@@ -1,8 +1,11 @@
+import logging
+
 import stripe
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.user import PlanEnum, User
+from app.services.analytics_service import track_event
 from app.services import stripe_service
 
 
@@ -12,6 +15,9 @@ class BillingConfigError(Exception):
 
 class BillingRequestError(Exception):
     pass
+
+
+logger = logging.getLogger(__name__)
 
 
 def _looks_like_placeholder_key(secret: str) -> bool:
@@ -24,11 +30,20 @@ def _looks_like_placeholder_key(secret: str) -> bool:
 
 
 def _is_dev_or_test() -> bool:
-    return settings.app_env.strip().lower() in {"dev", "development", "test"}
+    return settings.is_dev_like
 
 
 def _fake_checkout_enabled() -> bool:
     return _is_dev_or_test() and bool(settings.stripe_allow_fake_checkout)
+
+
+def _fake_checkout_url(user_id: int) -> str:
+    frontend_url = settings.frontend_url.rstrip("/")
+    if frontend_url.startswith("http://localhost"):
+        frontend_url = frontend_url.replace("http://localhost", "http://127.0.0.1", 1)
+    if frontend_url.startswith("https://localhost"):
+        frontend_url = frontend_url.replace("https://localhost", "https://127.0.0.1", 1)
+    return f"{frontend_url}/billing/fake-checkout?user_id={user_id}"
 
 
 def _not_configured_message() -> str:
@@ -48,7 +63,7 @@ def create_checkout_session(db: Session, user: User) -> dict[str, str]:
     except BillingConfigError:
         if _fake_checkout_enabled():
             return {
-                "checkout_url": f"{settings.frontend_url.rstrip('/')}/billing/fake-checkout?user_id={user.id}",
+                "checkout_url": _fake_checkout_url(user.id),
                 "mode": "fake",
             }
         raise
@@ -64,7 +79,12 @@ def create_checkout_session(db: Session, user: User) -> dict[str, str]:
     try:
         url = stripe_service.create_checkout_session(user.stripe_customer_id, user.id)
     except stripe.error.StripeError as exc:
+        if _fake_checkout_enabled():
+            logger.warning("Stripe checkout failed in dev-like environment; falling back to fake checkout")
+            return {"checkout_url": _fake_checkout_url(user.id), "mode": "fake"}
         raise BillingRequestError(f"Stripe request failed: {exc.user_message or str(exc)}") from exc
+    track_event(db, "pro_checkout_started", user_id=user.id, payload={"mode": "stripe"})
+    db.commit()
     return {"checkout_url": url}
 
 
@@ -83,6 +103,7 @@ def cancel_subscription(db: Session, user: User) -> dict[str, bool]:
         raise BillingRequestError(f"Stripe request failed: {exc.user_message or str(exc)}") from exc
     user.plan = PlanEnum.FREE
     user.subscription_status = "canceled"
+    track_event(db, "pro_subscription_canceled", user_id=user.id)
     db.commit()
     return {"ok": True}
 
@@ -131,6 +152,7 @@ def handle_webhook(db: Session, payload: bytes, sig_header: str) -> dict[str, bo
             user.stripe_customer_id = customer_id
             user.stripe_subscription_id = subscription_id
             user.subscription_status = "active"
+            track_event(db, "pro_checkout_completed", user_id=user.id, payload={"subscription_id": subscription_id})
             db.commit()
 
     if event_type in {"customer.subscription.updated", "customer.subscription.deleted"}:

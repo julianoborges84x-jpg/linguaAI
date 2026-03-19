@@ -1,14 +1,18 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from typing import Literal
+from datetime import date
 
 
 class UserCreate(BaseModel):
     name: str
     email: EmailStr
     password: str
+    referral_code: str | None = None
 
 
 class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     name: str
     email: EmailStr
@@ -22,10 +26,18 @@ class UserOut(BaseModel):
     target_language_code: str | None = None
     base_language_code: str | None = None
     subscription_status: str | None = None
-
-    class Config:
-        from_attributes = True
-
+    google_sub: str | None = None
+    apple_sub: str | None = None
+    current_streak: int = 0
+    longest_streak: int = 0
+    last_active_date: date | None = None
+    referral_code: str | None = None
+    referred_count: int = 0
+    referred_by: int | None = None
+    referral_count: int = 0
+    pro_access_until: date | None = None
+    voice_messages_used: int = 0
+    voice_usage_reset_at: date | None = None
 
 class UserUpdate(BaseModel):
     plan: Literal["FREE", "PRO"] | None = None

@@ -19,9 +19,12 @@ from app.schemas.user import (
     UserUpdate,
 )
 from app.schemas.user_preferences import UserPreferencesUpdate as OnboardingPreferencesUpdate
+from app.services.analytics_service import track_event
 from app.services.email_service import send_verification_email
+from app.services.growth_service import apply_referral_if_valid, ensure_referral_code
 
 router = APIRouter(prefix="/users", tags=["users"])
+legacy_router = APIRouter(prefix="/user", tags=["users-legacy"])
 LANGUAGE_CODE_PATTERN = re.compile(r"^[a-z]{2,3}$")
 
 
@@ -32,9 +35,10 @@ def validate_language_code(code: str | None) -> str | None:
     normalized = code.strip().lower()
     if not normalized:
         return None
+
     if not LANGUAGE_CODE_PATTERN.match(normalized):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Invalid language code.",
         )
     return normalized
@@ -52,7 +56,7 @@ def validate_timezone(tz_name: str | None) -> str | None:
         ZoneInfo(normalized)
     except ZoneInfoNotFoundError:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Invalid timezone. Use IANA timezone (e.g. 'America/Sao_Paulo').",
         )
     return normalized
@@ -109,7 +113,7 @@ def _normalize_with_length(value: str, min_len: int, max_len: int, field_name: s
     normalized = value.strip()
     if len(normalized) < min_len or len(normalized) > max_len:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"{field_name} must be between {min_len} and {max_len} characters.",
         )
     return normalized
@@ -135,6 +139,17 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     )
 
     db.add(user)
+    db.flush()
+    ensure_referral_code(db, user)
+    apply_referral_if_valid(db, user, payload.referral_code)
+    track_event(db, "user_registered", user_id=user.id, payload={"referred_by_user_id": user.referred_by_user_id})
+    if user.referred_by_user_id:
+        track_event(
+            db,
+            "referral_converted",
+            user_id=user.referred_by_user_id,
+            payload={"new_user_id": user.id},
+        )
     db.commit()
     db.refresh(user)
 
@@ -168,6 +183,11 @@ def me(current: User = Depends(get_current_user)):
     return current
 
 
+@legacy_router.get("/me", response_model=UserOut, include_in_schema=False)
+def me_legacy(current: User = Depends(get_current_user)):
+    return me(current)
+
+
 @router.patch("/me", response_model=UserOut)
 def update_me(
     payload: OnboardingPreferencesUpdate,
@@ -177,7 +197,7 @@ def update_me(
     normalized_timezone = payload.timezone.strip()
     if not normalized_timezone:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="timezone cannot be empty.",
         )
 
@@ -192,7 +212,7 @@ def update_me(
     except IntegrityError:
         db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Invalid user update payload",
         )
 
@@ -200,8 +220,26 @@ def update_me(
     return current_user
 
 
+@legacy_router.patch("/me", response_model=UserOut, include_in_schema=False)
+def update_me_legacy(
+    payload: OnboardingPreferencesUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return update_me(payload, db, current_user)
+
+
 @router.patch("/me/onboarding", response_model=UserOut)
 def complete_onboarding(
+    payload: OnboardingPreferencesUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return update_me(payload, db, current_user)
+
+
+@legacy_router.patch("/me/onboarding", response_model=UserOut, include_in_schema=False)
+def complete_onboarding_legacy(
     payload: OnboardingPreferencesUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -275,7 +313,7 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
     except IntegrityError:
         db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Invalid user update payload",
         )
 

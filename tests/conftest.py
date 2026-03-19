@@ -41,6 +41,17 @@ def db_session(engine, monkeypatch):
 @pytest.fixture()
 def client(db_session):
     settings.db_auto_create = False
+    settings.app_env = "test"
+    settings.frontend_url = "http://localhost:3000"
+    settings.api_url = "http://127.0.0.1:8000"
+    settings.stripe_secret_key = ""
+    settings.stripe_price_id = ""
+    settings.stripe_webhook_secret = ""
+    settings.stripe_allow_fake_checkout = True
+    settings.smtp_host = None
+    settings.smtp_user = None
+    settings.smtp_password = None
+    settings.email_from = None
     if not settings.openai_api_key:
         settings.openai_api_key = "test-key"
 

@@ -1,6 +1,7 @@
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from app.models.study_session import StudySession
+from app.models.topic import Topic
 
 
 def create_user_and_headers(client, email="sessions@example.com", password="123"):
@@ -37,7 +38,7 @@ def test_session_finish_awards_xp_and_updates_user(client, db_session):
     session_id = start.json()["session_id"]
 
     session = db_session.query(StudySession).filter(StudySession.id == session_id).first()
-    session.started_at = datetime.utcnow() - timedelta(minutes=30)
+    session.started_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=30)
     db_session.commit()
 
     finish = client.post(
@@ -53,7 +54,7 @@ def test_session_finish_awards_xp_and_updates_user(client, db_session):
     me = client.get("/users/me", headers=headers)
     assert me.status_code == 200
     user_data = me.json()
-    assert user_data["xp_total"] == payload["xp_earned"]
+    assert user_data["xp_total"] >= payload["xp_earned"]
     assert user_data["level"] == min(10, user_data["xp_total"] // 100)
 
 
@@ -95,7 +96,7 @@ def test_progress_summary_returns_consistent_fields(client, db_session):
     session_id = started.json()["session_id"]
 
     session = db_session.query(StudySession).filter(StudySession.id == session_id).first()
-    session.started_at = datetime.utcnow() - timedelta(minutes=45)
+    session.started_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=45)
     db_session.commit()
 
     finished = client.post(
@@ -113,3 +114,23 @@ def test_progress_summary_returns_consistent_fields(client, db_session):
     assert 0 <= body["level"] <= 10
     assert body["streak_days"] >= 1
     assert body["weekly_minutes"] >= 1
+
+
+def test_session_start_with_topic_id_zero_uses_seeded_topic(client, db_session):
+    headers = create_user_and_headers(client, "topic-zero@example.com")
+    response = client.post("/sessions/start", headers=headers, json={"mode": "writing", "topic_id": 0})
+    assert response.status_code == 200
+
+    session_id = response.json()["session_id"]
+    session = db_session.query(StudySession).filter(StudySession.id == session_id).first()
+    assert session is not None
+    assert session.topic_id is not None
+    topic = db_session.query(Topic).filter(Topic.id == session.topic_id).first()
+    assert topic is not None
+
+
+def test_session_start_with_invalid_topic_id_returns_422(client):
+    headers = create_user_and_headers(client, "invalid-topic@example.com")
+    response = client.post("/sessions/start", headers=headers, json={"mode": "writing", "topic_id": 999999})
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Invalid topic_id"

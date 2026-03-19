@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ChatIn(BaseModel):
@@ -14,33 +14,30 @@ class ChatOut(BaseModel):
 
 
 class TopicOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     name: str
     category: str
 
-    class Config:
-        from_attributes = True
-
 
 class MessageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     message: str
     corrected: str
     explanation: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
-
 
 class VocabularyOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     word: str
     definition: str
     example: str
-
-    class Config:
-        from_attributes = True
 
 
 class ProgressOut(BaseModel):

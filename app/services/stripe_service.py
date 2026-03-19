@@ -26,8 +26,8 @@ def create_checkout_session(customer_id: str, user_id: int) -> str:
         customer=customer_id,
         mode="subscription",
         line_items=[{"price": settings.stripe_price_id, "quantity": 1}],
-        success_url=settings.stripe_success_url,
-        cancel_url=settings.stripe_cancel_url,
+        success_url=settings.effective_stripe_success_url,
+        cancel_url=settings.effective_stripe_cancel_url,
         subscription_data={"metadata": {"user_id": str(user_id)}},
         metadata={"user_id": str(user_id)},
     )
@@ -47,6 +47,6 @@ def create_customer_portal_session(customer_id: str) -> str:
     _configure_stripe()
     session = stripe.billing_portal.Session.create(
         customer=customer_id,
-        return_url=settings.stripe_success_url,
+        return_url=settings.effective_stripe_success_url,
     )
     return session.url

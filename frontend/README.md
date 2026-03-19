@@ -1,24 +1,20 @@
-# MentorLingua Web
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+</div>
 
-## Requisitos
-- Node.js 18+
+# Run and deploy your AI Studio app
 
-## Rodar localmente
+This contains everything you need to run your app locally.
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
+View your app in AI Studio: https://ai.studio/apps/48b77b3d-1bd4-4c88-b587-12f904f3bdbf
 
-## Variáveis de ambiente
+## Run Locally
 
-- `VITE_API_URL` (ex.: `http://localhost:8000`)
+**Prerequisites:**  Node.js
 
-## Arquitetura (pronta para migração para React Native)
 
-- `src/core` -> apiClient + storage (pode trocar por AsyncStorage no mobile)
-- `src/services` -> camada de chamadas REST
-- `src/features` -> telas por domínio
-- `src/shared` -> componentes e layouts reutilizáveis
-- `src/hooks` -> hooks de estado
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`

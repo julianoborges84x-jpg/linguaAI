@@ -66,7 +66,7 @@ def test_billing_endpoints_do_not_return_500_when_not_configured(client, monkeyp
     portal = client.post("/billing/create-portal-session", headers=auth_header(token))
     assert portal.status_code in (400, 503)
 
-    webhook = client.post("/billing/webhook", data="{}", headers={"Stripe-Signature": "sig"})
+    webhook = client.post("/billing/webhook", content="{}", headers={"Stripe-Signature": "sig"})
     assert webhook.status_code in (400, 503)
 
 
@@ -129,16 +129,16 @@ def test_features_require_auth_and_allow_writing_for_authenticated_user(client):
     assert authorized.json() == {"feature": "writing"}
 
 
-def test_cors_allows_localhost_5173(client):
+def test_cors_allows_localhost_3000(client):
     response = client.options(
         "/users",
         headers={
-            "Origin": "http://localhost:5173",
+            "Origin": "http://localhost:3000",
             "Access-Control-Request-Method": "POST",
         },
     )
     assert response.status_code == 200
-    assert response.headers.get("access-control-allow-origin") == "http://localhost:5173"
+    assert response.headers.get("access-control-allow-origin") == "http://localhost:3000"
 
 
 def test_swagger_ui_and_openapi_are_available(client):

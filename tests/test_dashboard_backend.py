@@ -110,4 +110,45 @@ def test_create_checkout_session_returns_fake_url_in_dev_when_disabled(client, m
     assert res.status_code == 200
     body = res.json()
     assert "checkout_url" in body
-    assert body["checkout_url"].startswith("http://127.0.0.1:5173/billing/fake-checkout")
+    assert body["checkout_url"].startswith("http://127.0.0.1:3000/billing/fake-checkout")
+
+
+def test_subscribe_pro_finalize_updates_dashboard_status(client, monkeypatch):
+    user, headers = create_user_and_token(client, "billing-pro-flow@example.com")
+    user_id = user["id"]
+
+    monkeypatch.setattr(settings, "app_env", "dev")
+    monkeypatch.setattr(settings, "stripe_secret_key", "")
+    monkeypatch.setattr(settings, "stripe_price_id", "")
+    monkeypatch.setattr(settings, "stripe_allow_fake_checkout", True)
+
+    checkout = client.post("/billing/create-checkout-session", headers=headers)
+    assert checkout.status_code == 200
+    assert "checkout_url" in checkout.json()
+
+    def fake_construct_event(payload, sig_header, secret):
+        return {
+            "type": "checkout.session.completed",
+            "data": {
+                "object": {
+                    "customer": "cus_dash_123",
+                    "subscription": "sub_dash_123",
+                    "metadata": {"user_id": str(user_id)},
+                }
+            },
+        }
+
+    monkeypatch.setattr("stripe.Webhook.construct_event", fake_construct_event)
+    monkeypatch.setattr(settings, "stripe_webhook_secret", "whsec_test")
+
+    webhook = client.post("/billing/webhook", content="{}", headers={"Stripe-Signature": "sig"})
+    assert webhook.status_code == 200
+
+    me = client.get("/users/me", headers=headers)
+    assert me.status_code == 200
+    assert me.json()["plan"] == "PRO"
+
+    billing = client.get("/billing/status", headers=headers)
+    assert billing.status_code == 200
+    assert billing.json()["plan"] == "PRO"
+    assert billing.json()["subscription_status"] == "active"

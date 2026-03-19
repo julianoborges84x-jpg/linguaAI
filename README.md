@@ -1,45 +1,17 @@
-# LinguaAI SaaS (FastAPI + React/Vite)
+# LinguaAI / Mentor Lingua
 
-Projeto full stack pronto para operacao como SaaS com plano `FREE/PRO`, Stripe real, landing page, paginas legais e fluxo de deploy.
+SaaS de aprendizado de idiomas com backend FastAPI, frontend React/Vite, PostgreSQL, JWT, onboarding persistido e billing `FREE/PRO` com Stripe.
 
-## Stack
+## Estrutura ativa
 
-- Backend: FastAPI + SQLAlchemy
-- Frontend: React + Vite + Tailwind
-- Banco: PostgreSQL
-- Billing: Stripe Checkout + Billing Portal + Webhook
+- `app/`: backend FastAPI, models SQLAlchemy, rotas e servicos.
+- `alembic/`: migrations oficiais do banco.
+- `frontend/`: frontend principal em React + TypeScript + Vite.
+- `tests/`: testes automatizados do backend com pytest.
 
-## Variaveis de ambiente
+`frontend_backup/` e o frontend legado em JSX foram mantidos apenas como historico; a base ativa e deployavel e `frontend/`.
 
-1. Copie o arquivo de exemplo:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-2. Configure no backend (`.env`):
-
-- `API_URL`
-- `FRONTEND_URL`
-- `DATABASE_URL`
-- `JWT_SECRET`
-- `CORS_ALLOWED_ORIGINS`
-- `TRUSTED_HOSTS`
-- `STRIPE_SECRET_KEY`
-- `STRIPE_PRICE_ID`
-- `STRIPE_WEBHOOK_SECRET`
-- `STRIPE_SUCCESS_URL`
-- `STRIPE_CANCEL_URL`
-
-3. Configure no frontend (`frontend/.env`):
-
-```powershell
-Copy-Item frontend\.env.example frontend\.env
-```
-
-- `VITE_API_URL` (URL publica do backend)
-
-## Rodar localmente
+## Setup local
 
 ### Backend
 
@@ -47,6 +19,8 @@ Copy-Item frontend\.env.example frontend\.env
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+Copy-Item .env.example .env
+python -m alembic upgrade head
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
@@ -55,93 +29,140 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```powershell
 cd frontend
 npm install
-npm run dev -- --host 127.0.0.1 --port 5173
+Copy-Item .env.example .env
+npm run dev
 ```
 
-## Testes
+Backend esperado: `http://127.0.0.1:8000/docs`
 
-### Backend (unitarios + integracao)
+Frontend esperado: `http://127.0.0.1:3000`
+
+## Variaveis de ambiente
+
+### Backend `.env`
+
+- `APP_ENV`
+- `API_URL`
+- `FRONTEND_URL`
+- `DATABASE_URL`
+- `DB_AUTO_CREATE`
+- `JWT_SECRET`
+- `JWT_ALGORITHM`
+- `JWT_EXP_MINUTES`
+- `CORS_ALLOWED_ORIGINS`
+- `TRUSTED_HOSTS`
+- `OPENAI_API_KEY`
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_USER`
+- `SMTP_PASSWORD`
+- `EMAIL_FROM`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_PUBLISHABLE_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_PRICE_ID`
+- `STRIPE_SUCCESS_URL`
+- `STRIPE_CANCEL_URL`
+- `STRIPE_PAYMENT_METHOD_TYPES`
+- `STRIPE_ALLOW_FAKE_CHECKOUT`
+
+### Frontend `frontend/.env`
+
+- `VITE_API_URL`
+
+## Fluxos suportados
+
+- Criacao de conta em `POST /users`
+- Login JWT em `POST /auth/login`
+- Sessao autenticada em `GET /users/me`
+- Onboarding persistido em `PATCH /users/me`
+- Lesson com persistencia em `/sessions/start` e `/sessions/{id}/finish`
+- Chat real em `/mentor/chat`
+- Billing Stripe em `/billing/create-checkout-session`
+- Webhook Stripe em `/billing/webhook`
+- Status de plano em `/billing/status`
+- Verificacao de email via token
+
+## Testes e validacao
+
+### Backend
 
 ```powershell
-pytest -q
+.\.venv\Scripts\python -m pytest -q
 ```
 
-### Frontend build de producao
+### Frontend
 
 ```powershell
 cd frontend
+npm run lint
+npm run test:run
 npm run build
 ```
 
-## Endpoints Stripe
+## Banco e migrations
 
-- `POST /billing/create-checkout-session`
-- `POST /billing/create-portal-session`
-- `POST /billing/webhook`
-- `GET /billing/status`
-- `POST /billing/cancel-subscription`
+- A fonte de verdade do schema e o Alembic.
+- O comando oficial de bootstrap e `python -m alembic upgrade head`.
+- A migration `0006_users_verification_fields` alinha `users` com o modelo atual e adiciona `is_verified` e `verification_token`.
+- As migrations `0002` a `0005` foram deixadas idempotentes para recuperar ambientes que estavam em `0001_initial` mas com schema parcialmente alterado.
 
-Fluxo:
+## Stripe
 
-1. Checkout criado em `/billing/create-checkout-session`.
-2. Stripe conclui pagamento.
-3. Webhook `checkout.session.completed` promove usuario para `PRO`.
-4. Webhook `customer.subscription.updated/deleted` sincroniza status e volta para `FREE` quando cancelado.
+Eventos esperados no webhook:
 
-## Deploy frontend (Vercel)
+- `checkout.session.completed`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
+- `invoice.paid`
 
-1. Importar pasta `frontend` no Vercel.
-2. Build command: `npm run build`.
-3. Output: `dist`.
-4. Definir env:
-   - `VITE_API_URL=https://SEU_BACKEND_PUBLICO`
-5. Arquivo pronto: `frontend/vercel.json`.
+Em `development/test`, o fallback fake pode ser usado com `STRIPE_ALLOW_FAKE_CHECKOUT=true`. Em producao, deixe `false`.
 
-## Deploy backend (Render)
+## Deploy
 
-1. Criar Web Service apontando para este repositorio.
-2. Build command:
-   - `pip install -r requirements.txt`
-3. Start command:
-   - `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-4. Definir envs de producao (`APP_ENV=production`, `DATABASE_URL`, `JWT_SECRET`, Stripe etc.).
-5. Arquivo pronto: `render.yaml`.
+### Backend
 
-## Deploy backend (Railway)
+Comando de start:
 
-1. Criar projeto e conectar repositorio.
-2. Configurar envs de producao.
-3. Start command:
-   - `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-4. Arquivos prontos: `Procfile` e `railway.json`.
+```powershell
+uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
 
-## Stripe em producao
+Passos:
 
-1. Criar produto/price no Stripe e copiar `price_id`.
-2. Configurar:
-   - `STRIPE_SECRET_KEY`
-   - `STRIPE_PRICE_ID`
-   - `STRIPE_WEBHOOK_SECRET`
-3. Criar endpoint de webhook no Dashboard Stripe:
-   - `https://SEU_BACKEND/billing/webhook`
-4. Eventos recomendados:
-   - `checkout.session.completed`
-   - `customer.subscription.updated`
-   - `customer.subscription.deleted`
-   - `invoice.paid`
+1. Definir variaveis de ambiente de producao.
+2. Executar `python -m alembic upgrade head`.
+3. Configurar webhook Stripe apontando para `/billing/webhook`.
+4. Configurar `FRONTEND_URL`, `API_URL`, `CORS_ALLOWED_ORIGINS` e `TRUSTED_HOSTS`.
 
-## Dominio e CORS
+### Frontend
 
-1. Defina dominio frontend e backend (ex.: Vercel + Render).
-2. Atualize no backend:
-   - `FRONTEND_URL`
-   - `API_URL`
-   - `CORS_ALLOWED_ORIGINS` (localhost + dominio real)
-   - `TRUSTED_HOSTS`
-3. Atualize no frontend:
-   - `VITE_API_URL`
+Build:
 
-## Observacoes de operacao
+```powershell
+npm run build
+```
 
-- Em `dev/test`, o fallback fake pode ser habilitado com `STRIPE_ALLOW_FAKE_CHECKOUT=true`.
-- Em producao, use Stripe real e mantenha `STRIPE_ALLOW_FAKE_CHECKOUT=false`.
+Output:
+
+- `frontend/dist`
+
+Variavel obrigatoria:
+
+- `VITE_API_URL=https://seu-backend-publico`
+
+## Checklist de lancamento
+
+- Banco migrado com `alembic upgrade head`
+- Stripe checkout e webhook configurados
+- SMTP configurado ou conscientemente desativado
+- `JWT_SECRET` rotacionado e forte
+- `OPENAI_API_KEY` configurada
+- CORS/hosts revisados para dominio final
+- Healthcheck validado
+- Frontend buildado e backend com `/docs` acessivel
+
+## Seguranca
+
+- O `.env` atual do workspace continha segredos reais e deve ser rotacionado antes do lancamento publico.
+- Nao mantenha chaves Stripe, OpenAI, JWT e credenciais do Neon versionadas.

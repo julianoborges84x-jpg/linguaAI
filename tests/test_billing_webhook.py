@@ -25,7 +25,7 @@ def test_webhook_checkout_completed_sets_user_as_pro(client, db_session, monkeyp
     monkeypatch.setattr("stripe.Webhook.construct_event", fake_construct_event)
     monkeypatch.setattr(settings, "stripe_webhook_secret", "whsec_test")
 
-    response = client.post("/billing/webhook", data=json.dumps({}), headers={"Stripe-Signature": "sig"})
+    response = client.post("/billing/webhook", content=json.dumps({}), headers={"Stripe-Signature": "sig"})
     assert response.status_code == 200
 
     updated = db_session.query(User).filter(User.id == user.id).first()
@@ -65,7 +65,7 @@ def test_webhook_subscription_deleted_downgrades_to_free(client, db_session, mon
     monkeypatch.setattr("stripe.Webhook.construct_event", fake_construct_event)
     monkeypatch.setattr(settings, "stripe_webhook_secret", "whsec_test")
 
-    response = client.post("/billing/webhook", data=json.dumps({}), headers={"Stripe-Signature": "sig"})
+    response = client.post("/billing/webhook", content=json.dumps({}), headers={"Stripe-Signature": "sig"})
     assert response.status_code == 200
 
     updated = db_session.query(User).filter(User.id == user.id).first()

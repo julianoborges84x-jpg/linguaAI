@@ -32,7 +32,7 @@ def test_webhook_updates_plan(client, db_session, monkeypatch):
     monkeypatch.setattr("stripe.Webhook.construct_event", fake_construct_event)
     monkeypatch.setattr(settings, "stripe_webhook_secret", "whsec_test")
 
-    res = client.post("/billing/webhook", data=json.dumps({}), headers={"Stripe-Signature": "t"})
+    res = client.post("/billing/webhook", content=json.dumps({}), headers={"Stripe-Signature": "t"})
     assert res.status_code == 200
 
     updated = db_session.query(User).filter(User.id == user.id).first()
@@ -93,3 +93,73 @@ def test_create_checkout_session_returns_checkout_url_for_free_user(client, free
     body = res.json()
     assert "checkout_url" in body
     assert body["checkout_url"]
+
+
+def test_checkout_uses_localhost_3000_success_and_cancel_urls(client, free_user, monkeypatch):
+    monkeypatch.setattr(settings, "app_env", "test")
+    monkeypatch.setattr(settings, "stripe_secret_key", "sk_test_123")
+    monkeypatch.setattr(settings, "stripe_price_id", "price_123")
+    monkeypatch.setattr(settings, "stripe_allow_fake_checkout", False)
+    monkeypatch.setattr(settings, "frontend_url", "http://localhost:3000")
+    monkeypatch.setattr(settings, "stripe_success_url", "http://localhost:3000/dashboard?checkout=success")
+    monkeypatch.setattr(settings, "stripe_cancel_url", "http://localhost:3000/dashboard?checkout=cancel")
+
+    captured = {}
+
+    class DummyCustomer:
+        id = "cus_test_123"
+
+    class DummySession:
+        url = "https://checkout.stripe.test/session_123"
+
+    def fake_customer_create(*args, **kwargs):
+        return DummyCustomer()
+
+    def fake_session_create(**kwargs):
+        captured.update(kwargs)
+        return DummySession()
+
+    monkeypatch.setattr("stripe.Customer.create", fake_customer_create)
+    monkeypatch.setattr("stripe.checkout.Session.create", fake_session_create)
+
+    token = _login_and_get_token(client, free_user.email, free_user.plain_password)
+    res = client.post("/billing/create-checkout-session", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    assert res.json()["checkout_url"] == "https://checkout.stripe.test/session_123"
+    assert captured["success_url"] == "http://localhost:3000/dashboard?checkout=success"
+    assert captured["cancel_url"] == "http://localhost:3000/dashboard?checkout=cancel"
+
+
+def test_checkout_rewrites_legacy_localhost_5173_redirects_to_3000(client, free_user, monkeypatch):
+    monkeypatch.setattr(settings, "app_env", "test")
+    monkeypatch.setattr(settings, "stripe_secret_key", "sk_test_123")
+    monkeypatch.setattr(settings, "stripe_price_id", "price_123")
+    monkeypatch.setattr(settings, "stripe_allow_fake_checkout", False)
+    monkeypatch.setattr(settings, "frontend_url", "http://localhost:3000")
+    monkeypatch.setattr(settings, "stripe_success_url", "http://localhost:5173/dashboard?checkout=success")
+    monkeypatch.setattr(settings, "stripe_cancel_url", "http://localhost:5173/dashboard?checkout=cancel")
+
+    captured = {}
+
+    class DummyCustomer:
+        id = "cus_test_5173"
+
+    class DummySession:
+        url = "https://checkout.stripe.test/session_5173"
+
+    def fake_customer_create(*args, **kwargs):
+        return DummyCustomer()
+
+    def fake_session_create(**kwargs):
+        captured.update(kwargs)
+        return DummySession()
+
+    monkeypatch.setattr("stripe.Customer.create", fake_customer_create)
+    monkeypatch.setattr("stripe.checkout.Session.create", fake_session_create)
+
+    token = _login_and_get_token(client, free_user.email, free_user.plain_password)
+    res = client.post("/billing/create-checkout-session", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    assert res.json()["checkout_url"] == "https://checkout.stripe.test/session_5173"
+    assert captured["success_url"] == "http://localhost:3000/dashboard?checkout=success"
+    assert captured["cancel_url"] == "http://localhost:3000/dashboard?checkout=cancel"

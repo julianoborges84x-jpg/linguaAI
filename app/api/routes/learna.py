@@ -20,15 +20,9 @@ from app.schemas.learna import (
 from app.schemas.session import ProgressSummaryOut
 from app.services.chat_ai import generate_correction
 from app.services.progress_service import build_progress_summary
+from app.services.topic_service import ensure_default_topics
 
 router = APIRouter(prefix="", tags=["learna"])
-
-DEFAULT_TOPICS = [
-    ("jobs", "career"),
-    ("travel", "lifestyle"),
-    ("dating", "social"),
-    ("shopping", "daily"),
-]
 
 DEFAULT_VOCABULARY = [
     ("appointment", "A time arranged for a meeting.", "I have a dentist appointment at 3 PM."),
@@ -38,9 +32,7 @@ DEFAULT_VOCABULARY = [
 
 
 def ensure_seed_data(db: Session) -> None:
-    if db.query(Topic.id).count() == 0:
-        for name, category in DEFAULT_TOPICS:
-            db.add(Topic(name=name, category=category))
+    ensure_default_topics(db)
 
     if db.query(Vocabulary.id).count() == 0:
         for word, definition, example in DEFAULT_VOCABULARY:
@@ -64,7 +56,7 @@ def get_or_create_progress(db: Session, user_id: int) -> Progress:
 @router.post("/chat", response_model=ChatOut)
 def chat(payload: ChatIn, db: Session = Depends(get_db), user: User = Depends(require_pro_user)):
     if not payload.message.strip():
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Message is required")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Message is required")
 
     result = generate_correction(payload.message)
     db.add(

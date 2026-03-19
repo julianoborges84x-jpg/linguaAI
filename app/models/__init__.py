@@ -10,6 +10,37 @@ from .vocabulary import Vocabulary
 from .progress import Progress
 from .study_session import StudySession
 from .daily_activity import DailyActivity
+from .daily_mission import DailyMissionProgress
+from .analytics_event import AnalyticsEvent
+from .immersion import (
+    ImmersionMission,
+    ImmersionScenario,
+    ImmersionSession,
+    ImmersionTurn,
+    MultiplayerChallenge,
+    RoleplayCharacter,
+    SmartNotificationQueue,
+    TutorProfile,
+    UserImmersionMissionProgress,
+)
+from .real_life import RealLifeSession, RealLifeTurn
+from .daily_challenge import DailyChallengeAttempt
+from .pedagogy import (
+    GrammarMastery,
+    LearnerProfile,
+    LearnerStrength,
+    LearnerWeakness,
+    LearningModule,
+    LearningObjective,
+    LearningTrack,
+    LearningUnit,
+    MistakeLog,
+    ProficiencyLevel,
+    ReviewQueue,
+    SkillTag,
+    VocabularyItem,
+    VocabularyProgress,
+)
 
 __all__ = [
     "User",
@@ -25,4 +56,32 @@ __all__ = [
     "Progress",
     "StudySession",
     "DailyActivity",
+    "DailyMissionProgress",
+    "AnalyticsEvent",
+    "ImmersionScenario",
+    "RoleplayCharacter",
+    "ImmersionSession",
+    "ImmersionTurn",
+    "TutorProfile",
+    "ImmersionMission",
+    "UserImmersionMissionProgress",
+    "MultiplayerChallenge",
+    "SmartNotificationQueue",
+    "RealLifeSession",
+    "RealLifeTurn",
+    "DailyChallengeAttempt",
+    "ProficiencyLevel",
+    "LearningTrack",
+    "LearningModule",
+    "LearningUnit",
+    "LearningObjective",
+    "SkillTag",
+    "LearnerProfile",
+    "LearnerWeakness",
+    "LearnerStrength",
+    "GrammarMastery",
+    "VocabularyItem",
+    "VocabularyProgress",
+    "MistakeLog",
+    "ReviewQueue",
 ]

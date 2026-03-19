@@ -29,3 +29,9 @@ class ProgressSummaryOut(BaseModel):
     level: int
     streak_days: int
     weekly_minutes: int
+
+
+class SessionTopicOut(BaseModel):
+    id: int
+    name: str
+    category: str

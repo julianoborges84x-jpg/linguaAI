@@ -21,12 +21,12 @@ def test_cors_preflight(client):
     response = client.options(
         "/users/me",
         headers={
-            "Origin": "http://localhost:5173",
+            "Origin": "http://localhost:3000",
             "Access-Control-Request-Method": "GET",
         },
     )
     assert response.status_code == 200
-    assert response.headers.get("access-control-allow-origin") == "http://localhost:5173"
+    assert response.headers.get("access-control-allow-origin") == "http://localhost:3000"
 
 
 def test_auth_bearer_token(client):
@@ -37,6 +37,29 @@ def test_auth_bearer_token(client):
     authorized = client.get("/users/me", headers=headers)
     assert authorized.status_code == 200
     assert authorized.json()["email"] == "auth-bearer-token@example.com"
+
+
+def test_legacy_user_me_endpoint_keeps_backward_compatibility(client):
+    unauthorized = client.get("/user/me")
+    assert unauthorized.status_code == 401
+
+    headers = create_user_and_token(client, "legacy-user-me@example.com")
+    authorized = client.get("/user/me", headers=headers)
+    assert authorized.status_code == 200
+    assert authorized.json()["email"] == "legacy-user-me@example.com"
+
+
+def test_legacy_user_me_patch_keeps_backward_compatibility(client):
+    headers = create_user_and_token(client, "legacy-user-me-patch@example.com")
+
+    response = client.patch(
+        "/user/me",
+        headers=headers,
+        json={"target_language": "en", "timezone": "America/Sao_Paulo"},
+    )
+    assert response.status_code == 200
+    assert response.json()["target_language"] == "en"
+    assert response.json()["timezone"] == "America/Sao_Paulo"
 
 
 def test_billing_create_checkout_session_stripe_not_configured(client, monkeypatch):

@@ -7,6 +7,7 @@ Create Date: 2026-02-28 00:00:02.000000
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 
 revision = "0004_user_onboarding_completed"
@@ -16,10 +17,14 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column(
-        "users",
-        sa.Column("onboarding_completed", sa.Boolean(), nullable=False, server_default=sa.false()),
-    )
+    bind = op.get_bind()
+    inspector = inspect(bind)
+    user_columns = {column["name"] for column in inspector.get_columns("users")}
+    if "onboarding_completed" not in user_columns:
+        op.add_column(
+            "users",
+            sa.Column("onboarding_completed", sa.Boolean(), nullable=False, server_default=sa.false()),
+        )
 
 
 def downgrade():

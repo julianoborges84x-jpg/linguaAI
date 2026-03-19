@@ -87,7 +87,7 @@ def recalculate_level(xp_total: int) -> int:
 
 def build_progress_summary(db: Session, user: User) -> dict[str, int]:
     today = today_for_user(user)
-    streak = calculate_streak(db, user.id, today)
+    streak = max(calculate_streak(db, user.id, today), max(0, user.current_streak or 0))
     weekly_minutes = calculate_weekly_minutes(db, user.id, today)
     return {
         "xp_total": max(0, user.xp_total or 0),

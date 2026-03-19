@@ -1,4 +1,6 @@
-from sqlalchemy import String, Integer, Enum, ForeignKey, Boolean
+from datetime import date
+
+from sqlalchemy import Boolean, Date, Enum, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 import enum
@@ -27,6 +29,17 @@ class User(Base):
     stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     subscription_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    google_sub: Mapped[str | None] = mapped_column(String(255), unique=True, index=True, nullable=True)
+    apple_sub: Mapped[str | None] = mapped_column(String(255), unique=True, index=True, nullable=True)
+    current_streak: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    longest_streak: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_active_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    referral_code: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, nullable=True)
+    referred_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    referred_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    pro_access_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    voice_messages_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    voice_usage_reset_at: Mapped[date | None] = mapped_column(Date, nullable=True)
     target_language_code: Mapped[str | None] = mapped_column(
         ForeignKey("languages.iso_code"),
         nullable=True,
@@ -44,3 +57,11 @@ class User(Base):
     def language(self, value: str | None) -> None:
         self.target_language = value
         self.target_language_code = value
+
+    @property
+    def referred_by(self) -> int | None:
+        return self.referred_by_user_id
+
+    @property
+    def referral_count(self) -> int:
+        return self.referred_count or 0

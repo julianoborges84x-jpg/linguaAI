@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
@@ -13,7 +13,11 @@ class StudySession(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
     mode: Mapped[str] = mapped_column(String(32), nullable=False)
     topic_id: Mapped[int | None] = mapped_column(ForeignKey("topics.id"), nullable=True)
-    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
+    )
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     interactions_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     xp_earned: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

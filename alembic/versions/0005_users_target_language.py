@@ -7,6 +7,7 @@ Create Date: 2026-02-28 00:00:03.000000
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 
 revision = "0005_users_target_language"
@@ -16,7 +17,11 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column("users", sa.Column("target_language", sa.String(length=8), nullable=True))
+    bind = op.get_bind()
+    inspector = inspect(bind)
+    user_columns = {column["name"] for column in inspector.get_columns("users")}
+    if "target_language" not in user_columns:
+        op.add_column("users", sa.Column("target_language", sa.String(length=8), nullable=True))
 
 
 def downgrade():

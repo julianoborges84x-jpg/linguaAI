@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --color-primary: #0d6cf2;
+  --color-background-light: #f5f7f8;
+  --color-background-dark: #101722;
+}
+
+@layer base {
+  body {
+    @apply font-sans bg-background-light text-slate-900;
+  }
+}
+
+@keyframes bounce-subtle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.animate-bounce-subtle {
+  animation: bounce-subtle 3s ease-in-out infinite;
+}
+
+.bg-pattern {
+  background-image: radial-gradient(circle at 2px 2px, rgba(13, 108, 242, 0.05) 1px, transparent 0);
+  background-size: 24px 24px;
+}

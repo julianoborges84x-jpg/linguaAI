@@ -71,3 +71,29 @@ def test_feature_access_by_plan(client):
 def test_missing_token(client):
     res = client.get("/features/writing")
     assert res.status_code == 401
+
+
+def test_users_me_accepts_legacy_token_header_formats(client):
+    register = register_user(client, "Legacy", "legacy_token@example.com", "secret123")
+    assert register.status_code == 201
+
+    login = login_user(client, "legacy_token@example.com", "secret123")
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+
+    as_token_scheme = client.get("/users/me", headers={"Authorization": f"Token {token}"})
+    assert as_token_scheme.status_code == 200
+    assert as_token_scheme.json()["email"] == "legacy_token@example.com"
+
+    as_x_access_token = client.get("/users/me", headers={"X-Access-Token": token})
+    assert as_x_access_token.status_code == 200
+    assert as_x_access_token.json()["email"] == "legacy_token@example.com"
+
+
+def test_users_me_rejects_legacy_non_numeric_subject_token(client):
+    from app.core.security import create_access_token
+
+    token = create_access_token("legacy-email-subject@example.com")
+    res = client.get("/users/me", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 401
+    assert res.json()["detail"] == "Invalid token"

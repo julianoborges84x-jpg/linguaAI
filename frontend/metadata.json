@@ -1,0 +1,5 @@
+{
+  "name": "Mentor Língua",
+  "description": "Seu tutor de idiomas inteligente com IA para feedback em tempo real e conversação.",
+  "requestFramePermissions": ["microphone"]
+}
