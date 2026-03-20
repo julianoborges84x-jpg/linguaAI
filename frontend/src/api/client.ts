@@ -1,20 +1,27 @@
 function resolveApiUrl() {
   const fromEnv = (import.meta.env.VITE_API_URL || '').trim();
-  if (fromEnv) return fromEnv.replace(/\/$/, '');
 
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname.toLowerCase();
-    const protocol = window.location.protocol.toLowerCase();
-    const isLocal = host === 'localhost' || host === '127.0.0.1';
-    if (isLocal) {
-      return 'http://127.0.0.1:8000';
-    }
-    // Production safety fallback for published frontend when VITE_API_URL is missing.
-    if (protocol === 'https:') {
-      return 'https://linguaai-2.onrender.com';
-    }
+  // ✅ PRIORIDADE TOTAL: variável da Vercel
+  if (fromEnv) {
+    return fromEnv.replace(/\/$/, '');
   }
 
+  // 🔒 BLOQUEIO EM PRODUÇÃO (EVITA USAR LOCALHOST SEM QUERER)
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname.toLowerCase();
+    const isLocal = host === 'localhost' || host === '127.0.0.1';
+
+    if (!isLocal) {
+      throw new Error(
+        '❌ VITE_API_URL NÃO CONFIGURADO EM PRODUÇÃO. Configure na Vercel.'
+      );
+    }
+
+    // 🧪 Ambiente local
+    return 'http://127.0.0.1:8000';
+  }
+
+  // fallback extremo (SSR ou erro raro)
   return 'http://127.0.0.1:8000';
 }
 
@@ -38,15 +45,27 @@ type ApiRequestOptions = RequestInit & {
   isForm?: boolean;
 };
 
-export async function apiRequest<T>(endpoint: string, options: ApiRequestOptions = {}): Promise<T> {
-  const { authenticated = false, isForm = false, headers, body, ...rest } = options;
+export async function apiRequest<T>(
+  endpoint: string,
+  options: ApiRequestOptions = {}
+): Promise<T> {
+  const {
+    authenticated = false,
+    isForm = false,
+    headers,
+    body,
+    ...rest
+  } = options;
+
   const token = getToken();
   const finalHeaders = new Headers(headers);
 
+  // JSON automático
   if (!isForm && !finalHeaders.has('Content-Type') && body !== undefined) {
     finalHeaders.set('Content-Type', 'application/json');
   }
 
+  // Auth
   if (authenticated && token) {
     finalHeaders.set('Authorization', `Bearer ${token}`);
   }
@@ -57,13 +76,21 @@ export async function apiRequest<T>(endpoint: string, options: ApiRequestOptions
     body,
   });
 
-  const isJson = response.headers.get('content-type')?.includes('application/json');
+  const isJson = response.headers
+    .get('content-type')
+    ?.includes('application/json');
+
   const data = isJson ? await response.json() : null;
 
   if (!response.ok) {
     const message =
-      (data && typeof data === 'object' && 'detail' in data && typeof data.detail === 'string' && data.detail) ||
-      'API request failed';
+      (data &&
+        typeof data === 'object' &&
+        'detail' in data &&
+        typeof data.detail === 'string' &&
+        data.detail) ||
+      `Erro ${response.status}`;
+
     throw new Error(message);
   }
 
