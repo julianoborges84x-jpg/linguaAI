@@ -28,6 +28,13 @@ import {
   VoiceMentor,
   VoiceMentorChatResponse,
   VoiceUsage,
+  CurrentTrackData,
+  PedagogyModule,
+  LessonDetail,
+  LessonSubmitResponse,
+  LessonStepSaveResponse,
+  ReviewTodayData,
+  ProgressSummaryData,
 } from '../types';
 
 export async function register(name: string, email: string, password: string, referralCode?: string | null) {
@@ -337,6 +344,72 @@ export async function fetchPedagogyDashboard() {
 
 export async function fetchAdaptiveRecommendations() {
   return apiRequest<PedagogyDashboardData['recommendations']>('/pedagogy/recommendations', {
+    method: 'GET',
+    authenticated: true,
+  });
+}
+
+export async function fetchCurrentTrack() {
+  return apiRequest<CurrentTrackData>('/pedagogy/track/current', {
+    method: 'GET',
+    authenticated: true,
+  });
+}
+
+export async function fetchPedagogyModules() {
+  return apiRequest<PedagogyModule[]>('/pedagogy/modules', {
+    method: 'GET',
+    authenticated: true,
+  });
+}
+
+export async function fetchPedagogyModule(moduleId: number) {
+  return apiRequest<PedagogyModule>(`/pedagogy/modules/${moduleId}`, {
+    method: 'GET',
+    authenticated: true,
+  });
+}
+
+export async function fetchPedagogyLesson(lessonId: number) {
+  return apiRequest<LessonDetail>(`/pedagogy/lessons/${lessonId}`, {
+    method: 'GET',
+    authenticated: true,
+  });
+}
+
+export async function submitPedagogyLesson(lessonId: number, payload: { correct_count: number; total_count: number; conversation_turns: number }) {
+  return apiRequest<LessonSubmitResponse>(`/pedagogy/lessons/${lessonId}/submit`, {
+    method: 'POST',
+    authenticated: true,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function savePedagogyLessonStep(lessonId: number, payload: { current_step: number }) {
+  return apiRequest<LessonStepSaveResponse>(`/pedagogy/lessons/${lessonId}/step`, {
+    method: 'POST',
+    authenticated: true,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchReviewToday() {
+  return apiRequest<ReviewTodayData>('/pedagogy/review/today', {
+    method: 'GET',
+    authenticated: true,
+  });
+}
+
+export async function submitReviewToday(payload: { review_item_id: number; correct: boolean }) {
+  return apiRequest<{ review_item_id: number; correct: boolean; next_review_at: string }>('/pedagogy/review/submit', {
+    method: 'POST',
+    authenticated: true,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchProgressSummary() {
+  return apiRequest<ProgressSummaryData>('/pedagogy/progress/summary', {
     method: 'GET',
     authenticated: true,
   });

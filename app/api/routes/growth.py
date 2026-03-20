@@ -142,7 +142,7 @@ def collect_public_event(payload: AnalyticsEventIn, db: Session = Depends(get_db
     normalized = payload.event_type.strip().lower()
     if normalized not in PUBLIC_CONVERSION_EVENTS:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Unsupported public event type",
         )
 
@@ -150,3 +150,4 @@ def collect_public_event(payload: AnalyticsEventIn, db: Session = Depends(get_db
     db.commit()
     db.refresh(event)
     return AnalyticsEventOut(id=event.id, event_type=event.event_type, created_at=event.created_at)
+

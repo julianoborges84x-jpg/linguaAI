@@ -56,7 +56,7 @@ def get_or_create_progress(db: Session, user_id: int) -> Progress:
 @router.post("/chat", response_model=ChatOut)
 def chat(payload: ChatIn, db: Session = Depends(get_db), user: User = Depends(require_pro_user)):
     if not payload.message.strip():
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Message is required")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Message is required")
 
     result = generate_correction(payload.message)
     db.add(
@@ -133,3 +133,4 @@ def update_progress(payload: ProgressUpdate, db: Session = Depends(get_db), user
 @router.get("/progress/summary", response_model=ProgressSummaryOut)
 def progress_summary(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     return build_progress_summary(db, user)
+

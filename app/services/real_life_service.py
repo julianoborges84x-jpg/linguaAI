@@ -79,7 +79,7 @@ def _normalize_scenario(scenario: str) -> str:
     normalized = scenario.strip().lower()
     if normalized not in SCENARIOS:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Unsupported scenario",
         )
     return normalized
@@ -186,7 +186,7 @@ def send_real_life_message(db: Session, user: User, session_id: int, message: st
 
     clean_message = message.strip()
     if not clean_message:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Message cannot be empty")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Message cannot be empty")
 
     rt = max(0, response_time_seconds or session.pressure_seconds + 1)
     is_correct, correction, pressure_note = _evaluate_message(clean_message, rt, session.pressure_seconds)
@@ -265,3 +265,4 @@ def send_real_life_message(db: Session, user: User, session_id: int, message: st
         "total_xp_session": session.total_xp,
         "updated_at": session.updated_at,
     }
+

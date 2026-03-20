@@ -306,7 +306,7 @@ def detect_base_language(
 
     lang = db.query(Language).filter(Language.iso_code == iso_code).first()
     if not lang:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Detected language not supported")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Detected language not supported")
 
     user.base_language_code = iso_code
     db.commit()
@@ -510,3 +510,4 @@ def voice_chat(
         audio_available=True,
         voice_usage=_voice_usage_payload(user),
     )
+

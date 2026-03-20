@@ -1,4 +1,24 @@
-const API_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
+function resolveApiUrl() {
+  const fromEnv = (import.meta.env.VITE_API_URL || '').trim();
+  if (fromEnv) return fromEnv.replace(/\/$/, '');
+
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname.toLowerCase();
+    const protocol = window.location.protocol.toLowerCase();
+    const isLocal = host === 'localhost' || host === '127.0.0.1';
+    if (isLocal) {
+      return 'http://127.0.0.1:8000';
+    }
+    // Production safety fallback for published frontend when VITE_API_URL is missing.
+    if (protocol === 'https:') {
+      return 'https://linguaai-2.onrender.com';
+    }
+  }
+
+  return 'http://127.0.0.1:8000';
+}
+
+const API_URL = resolveApiUrl();
 const TOKEN_KEY = 'token';
 
 export function getToken() {

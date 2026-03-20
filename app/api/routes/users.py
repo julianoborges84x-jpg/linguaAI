@@ -38,7 +38,7 @@ def validate_language_code(code: str | None) -> str | None:
 
     if not LANGUAGE_CODE_PATTERN.match(normalized):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Invalid language code.",
         )
     return normalized
@@ -56,7 +56,7 @@ def validate_timezone(tz_name: str | None) -> str | None:
         ZoneInfo(normalized)
     except ZoneInfoNotFoundError:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Invalid timezone. Use IANA timezone (e.g. 'America/Sao_Paulo').",
         )
     return normalized
@@ -113,7 +113,7 @@ def _normalize_with_length(value: str, min_len: int, max_len: int, field_name: s
     normalized = value.strip()
     if len(normalized) < min_len or len(normalized) > max_len:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"{field_name} must be between {min_len} and {max_len} characters.",
         )
     return normalized
@@ -197,7 +197,7 @@ def update_me(
     normalized_timezone = payload.timezone.strip()
     if not normalized_timezone:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="timezone cannot be empty.",
         )
 
@@ -212,7 +212,7 @@ def update_me(
     except IntegrityError:
         db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Invalid user update payload",
         )
 
@@ -313,9 +313,10 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
     except IntegrityError:
         db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Invalid user update payload",
         )
 
     db.refresh(user)
     return user
+

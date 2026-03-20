@@ -1,13 +1,13 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.core.deps import require_pro_user
-from app.models.user import User
+from app.core.deps import get_current_user, require_pro_user
+from app.models.user import PlanEnum, User
 
 router = APIRouter(prefix="/features", tags=["features"])
 
 
 @router.get("/writing")
-def writing():
+def writing(_: User = Depends(get_current_user)):
     return {"feature": "writing"}
 
 
@@ -27,5 +27,7 @@ def fillers(_: User = Depends(require_pro_user)):
 
 
 @router.get("/ads")
-def ads():
+def ads(current_user: User = Depends(get_current_user)):
+    if current_user.plan == PlanEnum.PRO:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usuarios PRO nao recebem anuncios")
     return {"feature": "ads"}

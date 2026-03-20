@@ -24,7 +24,7 @@ export default function LoginScreen({ onBack, onAuthenticated, defaultMode = 'lo
   const [feedback, setFeedback] = useState('');
   const [isSuccessFeedback, setIsSuccessFeedback] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<'google' | 'apple' | null>(null);
-  const [oauthStatus, setOauthStatus] = useState<{ google: boolean; apple: boolean }>({ google: false, apple: false });
+  const [oauthStatus, setOauthStatus] = useState<{ google: boolean; apple: boolean }>({ google: true, apple: true });
   const referralCodeFromQuery = new URLSearchParams(window.location.search).get('ref');
   const referralCodeFromStorage = localStorage.getItem(REFERRAL_STORAGE_KEY);
   const referralCode = (referralCodeFromQuery || referralCodeFromStorage || '').trim() || null;
@@ -37,7 +37,7 @@ export default function LoginScreen({ onBack, onAuthenticated, defaultMode = 'lo
         const apple = providers.find((item) => item.provider === 'apple')?.enabled ?? false;
         setOauthStatus({ google, apple });
       } catch {
-        setOauthStatus({ google: false, apple: false });
+        setOauthStatus({ google: true, apple: true });
       }
     };
     void loadProviders();
@@ -111,11 +111,6 @@ export default function LoginScreen({ onBack, onAuthenticated, defaultMode = 'lo
   };
 
   const handleOAuth = (provider: 'google' | 'apple') => {
-    if (!oauthStatus[provider]) {
-      setFeedback(`Login com ${provider === 'google' ? 'Google' : 'Apple'} indisponivel no momento.`);
-      setIsSuccessFeedback(false);
-      return;
-    }
     setOauthLoading(provider);
     setFeedback('');
     window.location.assign(`${API_URL}/auth/oauth/${provider}/start`);
@@ -246,7 +241,7 @@ export default function LoginScreen({ onBack, onAuthenticated, defaultMode = 'lo
           <button
             type="button"
             onClick={() => handleOAuth('google')}
-            disabled={!oauthStatus.google || Boolean(oauthLoading)}
+            disabled={Boolean(oauthLoading)}
             className="flex items-center justify-center gap-2 h-14 bg-white border border-slate-200 rounded-xl disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <img
@@ -260,13 +255,22 @@ export default function LoginScreen({ onBack, onAuthenticated, defaultMode = 'lo
           <button
             type="button"
             onClick={() => handleOAuth('apple')}
-            disabled={!oauthStatus.apple || Boolean(oauthLoading)}
+            disabled={Boolean(oauthLoading)}
             className="flex items-center justify-center gap-2 h-14 bg-white border border-slate-200 rounded-xl disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <Apple size={20} />
             <span className="text-slate-900 font-semibold">{oauthLoading === 'apple' ? 'Conectando...' : 'Apple'}</span>
           </button>
         </div>
+        {!oauthStatus.google || !oauthStatus.apple ? (
+          <p className="w-full max-w-[400px] mt-2 text-center text-xs text-amber-700">
+            Google/Apple precisam estar configurados no servidor para concluir o login social.
+          </p>
+        ) : null}
+        <p className="w-full max-w-[400px] mt-2 text-center text-xs text-slate-500">
+          {mode === 'register' ? 'Atalho rapido para criar conta' : 'Atalho rapido para entrar'}
+          {' '}com Google ou Apple.
+        </p>
 
         <div className="mt-auto pt-8 pb-4 text-center">
           {mode === 'login' ? (

@@ -82,6 +82,32 @@ Frontend esperado: `http://127.0.0.1:3000`
 - Webhook Stripe em `/billing/webhook`
 - Status de plano em `/billing/status`
 - Verificacao de email via token
+- Jornada pedagogica com trilha e aulas em `/pedagogy/*`
+
+## Seed pedagogico (conteudo)
+
+Para garantir o conteudo original da trilha `English Foundations A1` (24 aulas), execute:
+
+```powershell
+.\.venv\Scripts\python -m app.scripts.seed_pedagogy
+```
+
+Observacao:
+- O seed tambem e autoexecutado pelos endpoints pedagogicos quando necessario.
+- Idiomas suportados no seed atual: `en`, `es`, `fr`, `it`.
+
+## Endpoints pedagogicos principais
+
+- `GET /pedagogy/track/current`
+- `GET /pedagogy/modules`
+- `GET /pedagogy/modules/{id}`
+- `GET /pedagogy/lessons/{id}`
+- `POST /pedagogy/lessons/{id}/step`
+- `POST /pedagogy/lessons/{id}/submit`
+- `GET /pedagogy/review/today`
+- `POST /pedagogy/review/submit`
+- `GET /pedagogy/recommendations`
+- `GET /pedagogy/progress/summary`
 
 ## Testes e validacao
 
@@ -89,6 +115,14 @@ Frontend esperado: `http://127.0.0.1:3000`
 
 ```powershell
 .\.venv\Scripts\python -m pytest -q
+```
+
+### Smoke flow (aprendizagem visivel)
+
+Valida o fluxo real: login -> home pedagogica -> modulo -> licao -> submit -> resumo.
+
+```powershell
+.\.venv\Scripts\python scripts/smoke_learning_flow.py --base-url http://127.0.0.1:8000
 ```
 
 ### Frontend

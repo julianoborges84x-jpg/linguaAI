@@ -74,6 +74,7 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ]
+    cors_allow_origin_regex: str | None = r"https://.*\.vercel\.app"
     trusted_hosts: list[str] = ["localhost", "127.0.0.1", "testserver"]
 
     openai_api_key: str = ""
@@ -132,6 +133,12 @@ class Settings(BaseSettings):
                 "http://127.0.0.1:3000",
             ],
         )
+
+    @field_validator("cors_allow_origin_regex", mode="before")
+    @classmethod
+    def _coerce_cors_allow_origin_regex(cls, value: Any) -> str | None:
+        parsed = str(value or "").strip()
+        return parsed or None
 
     @field_validator("trusted_hosts", mode="before")
     @classmethod

@@ -8,6 +8,10 @@ const fetchGrowthDashboardMock = vi.fn();
 const fetchDailyChallengeMock = vi.fn();
 const fetchPedagogyDashboardMock = vi.fn();
 const fetchAdaptiveRecommendationsMock = vi.fn();
+const fetchCurrentTrackMock = vi.fn();
+const fetchPedagogyModulesMock = vi.fn();
+const fetchReviewTodayMock = vi.fn();
+const fetchProgressSummaryMock = vi.fn();
 const trackPublicGrowthEventMock = vi.fn();
 
 vi.mock('./api/auth', async () => {
@@ -22,6 +26,14 @@ vi.mock('./api/auth', async () => {
     fetchDailyChallenge: (...args: unknown[]) => fetchDailyChallengeMock(...args),
     fetchPedagogyDashboard: (...args: unknown[]) => fetchPedagogyDashboardMock(...args),
     fetchAdaptiveRecommendations: (...args: unknown[]) => fetchAdaptiveRecommendationsMock(...args),
+    fetchCurrentTrack: (...args: unknown[]) => fetchCurrentTrackMock(...args),
+    fetchPedagogyModules: (...args: unknown[]) => fetchPedagogyModulesMock(...args),
+    fetchReviewToday: (...args: unknown[]) => fetchReviewTodayMock(...args),
+    fetchProgressSummary: (...args: unknown[]) => fetchProgressSummaryMock(...args),
+    fetchPedagogyLesson: vi.fn(),
+    fetchPedagogyModule: vi.fn(),
+    submitPedagogyLesson: vi.fn(),
+    submitReviewToday: vi.fn(),
     getToken: vi.fn(() => localStorage.getItem('token')),
     storeToken: vi.fn((token: string) => localStorage.setItem('token', token)),
     trackPublicGrowthEvent: (...args: unknown[]) => trackPublicGrowthEventMock(...args),
@@ -38,9 +50,32 @@ describe('App routes', () => {
     fetchDailyChallengeMock.mockReset();
     fetchPedagogyDashboardMock.mockReset();
     fetchAdaptiveRecommendationsMock.mockReset();
+    fetchCurrentTrackMock.mockReset();
+    fetchPedagogyModulesMock.mockReset();
+    fetchReviewTodayMock.mockReset();
+    fetchProgressSummaryMock.mockReset();
     trackPublicGrowthEventMock.mockReset();
     fetchPedagogyDashboardMock.mockResolvedValue(null);
     fetchAdaptiveRecommendationsMock.mockResolvedValue([]);
+    fetchCurrentTrackMock.mockResolvedValue({
+      track_slug: 'english-foundations-a1',
+      track_title: 'English Foundations A1',
+      estimated_level: 'A1',
+      entry_profile: 'absolute beginner',
+      next_lesson_id: 1,
+      completed_lessons: 0,
+      total_lessons: 24,
+    });
+    fetchPedagogyModulesMock.mockResolvedValue([]);
+    fetchReviewTodayMock.mockResolvedValue({ items: [], estimated_minutes: 5 });
+    fetchProgressSummaryMock.mockResolvedValue({
+      lesson_progress: { completed: 0, total: 24 },
+      module_completion: 0,
+      vocabulary_mastered: 0,
+      review_due: 0,
+      estimated_level: 'A1',
+      weekly_consistency: 0,
+    });
     localStorage.clear();
     window.history.pushState({}, '', '/');
   });
@@ -140,8 +175,8 @@ describe('App routes', () => {
 
     render(<App />);
 
-    await waitFor(() => expect(screen.getByText('Maria')).toBeInTheDocument());
-    expect(screen.getByText(/Monetizacao/i)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/Hello,\s*Maria/i)).toBeInTheDocument());
+    expect(screen.getByText(/Painel de Aprendizagem/i)).toBeInTheDocument();
     expect(window.location.pathname).toBe('/dashboard');
   });
 

@@ -35,6 +35,7 @@ from app.models.pedagogy import (
     SkillTag,
     VocabularyItem,
     VocabularyProgress,
+    LearningUnitProgress,
 )
 
 
@@ -115,3 +116,33 @@ def ensure_schema_compatibility(engine: Engine, log: Callable[[str], None] | Non
     VocabularyProgress.__table__.create(bind=engine, checkfirst=True)
     MistakeLog.__table__.create(bind=engine, checkfirst=True)
     ReviewQueue.__table__.create(bind=engine, checkfirst=True)
+    LearningUnitProgress.__table__.create(bind=engine, checkfirst=True)
+
+    inspector = inspect(engine)
+    tables_after = set(inspector.get_table_names())
+    with engine.begin() as connection:
+        if "learning_tracks" in tables_after:
+            track_cols = {column["name"] for column in inspector.get_columns("learning_tracks")}
+            if "target_language_code" not in track_cols:
+                connection.execute(text("ALTER TABLE learning_tracks ADD COLUMN target_language_code VARCHAR(8) NOT NULL DEFAULT 'en'"))
+                if log:
+                    log("schema-compat applied: ALTER TABLE learning_tracks ADD COLUMN target_language_code")
+            if connection.engine.dialect.name.lower() in {"postgresql", "sqlite"}:
+                connection.execute(text("CREATE INDEX IF NOT EXISTS ix_learning_tracks_target_language_code ON learning_tracks (target_language_code)"))
+
+        if "vocabulary_items" in tables_after:
+            vocab_cols = {column["name"] for column in inspector.get_columns("vocabulary_items")}
+            if "language_code" not in vocab_cols:
+                connection.execute(text("ALTER TABLE vocabulary_items ADD COLUMN language_code VARCHAR(8) NOT NULL DEFAULT 'en'"))
+                if log:
+                    log("schema-compat applied: ALTER TABLE vocabulary_items ADD COLUMN language_code")
+            if connection.engine.dialect.name.lower() in {"postgresql", "sqlite"}:
+                connection.execute(text("CREATE INDEX IF NOT EXISTS ix_vocabulary_items_language_code ON vocabulary_items (language_code)"))
+
+        if "learning_unit_progress" in tables_after and connection.engine.dialect.name.lower() in {"postgresql", "sqlite"}:
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ux_learning_unit_progress_user_unit "
+                    "ON learning_unit_progress (user_id, unit_id)"
+                )
+            )

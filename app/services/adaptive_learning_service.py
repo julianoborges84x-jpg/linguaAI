@@ -12,6 +12,8 @@ from app.models.pedagogy import (
     LearnerWeakness,
     LearningTrack,
     LearningUnit,
+    LearningUnitProgress,
+    LearningModule,
     MistakeLog,
     ReviewQueue,
     VocabularyItem,
@@ -19,6 +21,11 @@ from app.models.pedagogy import (
 )
 
 LEVEL_ORDER = ["A1", "A2", "B1", "B2", "C1"]
+
+
+def resolve_target_language_code(user: User) -> str:
+    code = (user.target_language_code or user.target_language or "en").strip().lower()
+    return code if code in {"en", "es", "fr", "it"} else "en"
 
 
 def _score_to_level(score: float) -> str:
@@ -179,6 +186,7 @@ def review_vocabulary(db: Session, user_id: int, item_id: int, correct: bool) ->
 
 
 def build_recommendations(db: Session, user: User, profile: LearnerProfile) -> list[dict[str, object]]:
+    target_lang = resolve_target_language_code(user)
     top_weaknesses = (
         db.query(LearnerWeakness)
         .filter(LearnerWeakness.user_id == user.id)
@@ -189,7 +197,12 @@ def build_recommendations(db: Session, user: User, profile: LearnerProfile) -> l
 
     due_vocab = (
         db.query(VocabularyProgress)
-        .filter(VocabularyProgress.user_id == user.id, VocabularyProgress.next_review_at <= datetime.utcnow())
+        .join(VocabularyItem, VocabularyItem.id == VocabularyProgress.item_id)
+        .filter(
+            VocabularyProgress.user_id == user.id,
+            VocabularyProgress.next_review_at <= datetime.utcnow(),
+            VocabularyItem.language_code == target_lang,
+        )
         .count()
     )
 
@@ -215,7 +228,17 @@ def build_recommendations(db: Session, user: User, profile: LearnerProfile) -> l
             }
         )
 
-    next_unit = db.query(LearningUnit).filter(LearningUnit.cefr_level == profile.estimated_level).order_by(LearningUnit.id.asc()).first()
+    next_unit = (
+        db.query(LearningUnit)
+        .join(LearningModule, LearningModule.id == LearningUnit.module_id)
+        .join(LearningTrack, LearningTrack.id == LearningModule.track_id)
+        .filter(
+            LearningUnit.cefr_level == profile.estimated_level,
+            LearningTrack.target_language_code == target_lang,
+        )
+        .order_by(LearningUnit.id.asc())
+        .first()
+    )
     if next_unit:
         locked = bool(next_unit.is_pro_only and user.plan == PlanEnum.FREE)
         recs.append(
@@ -239,9 +262,13 @@ def build_recommendations(db: Session, user: User, profile: LearnerProfile) -> l
     return recs
 
 
-def build_track_progress(db: Session) -> list[dict[str, object]]:
+def build_track_progress(db: Session, user: User) -> list[dict[str, object]]:
+    target_lang = resolve_target_language_code(user)
     rows = (
         db.query(LearningUnit.cefr_level, func.count(LearningUnit.id))
+        .join(LearningModule, LearningModule.id == LearningUnit.module_id)
+        .join(LearningTrack, LearningTrack.id == LearningModule.track_id)
+        .filter(LearningTrack.target_language_code == target_lang)
         .group_by(LearningUnit.cefr_level)
         .order_by(LearningUnit.cefr_level.asc())
         .all()
@@ -310,9 +337,130 @@ def weaknesses_list(db: Session, user_id: int) -> list[str]:
 
 
 def bootstrap_initial_vocab_progress(db: Session, user_id: int, limit: int = 4) -> None:
+    user = db.query(User).filter(User.id == user_id).first()
+    target_lang = resolve_target_language_code(user) if user else "en"
     existing = db.query(VocabularyProgress.id).filter(VocabularyProgress.user_id == user_id).count()
     if existing > 0:
         return
-    items = db.query(VocabularyItem).order_by(VocabularyItem.id.asc()).limit(limit).all()
+    items = (
+        db.query(VocabularyItem)
+        .filter(VocabularyItem.language_code == target_lang)
+        .order_by(VocabularyItem.id.asc())
+        .limit(limit)
+        .all()
+    )
     for item in items:
         ensure_user_vocab_progress(db, user_id, item.id)
+
+
+def _step_pack(title: str, objective: str, primary_skill: str) -> list[dict[str, object]]:
+    return [
+        {
+            "step_index": 0,
+            "step_type": "warmup_choice",
+            "instruction": f"Warm-up: choose the best opening for '{title}'.",
+            "expected_pattern": "short phrase",
+        },
+        {
+            "step_index": 1,
+            "step_type": "build_sentence",
+            "instruction": f"Build one sentence focused on: {objective}",
+            "expected_pattern": "complete sentence",
+        },
+        {
+            "step_index": 2,
+            "step_type": "listening_match",
+            "instruction": "Listen/read and match meaning with context.",
+            "expected_pattern": "context match",
+        },
+        {
+            "step_index": 3,
+            "step_type": "speaking_turn",
+            "instruction": f"Speak one response using {primary_skill}.",
+            "expected_pattern": "spoken response",
+        },
+        {
+            "step_index": 4,
+            "step_type": "checkpoint",
+            "instruction": "Checkpoint: answer without hints.",
+            "expected_pattern": "independent answer",
+        },
+    ]
+
+
+def get_or_create_unit_progress(db: Session, user_id: int, unit_id: int, total_steps: int = 5) -> LearningUnitProgress:
+    row = (
+        db.query(LearningUnitProgress)
+        .filter(LearningUnitProgress.user_id == user_id, LearningUnitProgress.unit_id == unit_id)
+        .first()
+    )
+    if row:
+        return row
+    row = LearningUnitProgress(user_id=user_id, unit_id=unit_id, current_step=0, total_steps=total_steps, completed=False, score=0.0)
+    db.add(row)
+    db.flush()
+    return row
+
+
+def list_click_path_units(db: Session, user: User, level: str | None = None, limit: int = 20) -> list[LearningUnit]:
+    target_lang = resolve_target_language_code(user)
+    profile = get_or_create_learner_profile(db, user.id)
+    effective_level = level or profile.estimated_level
+    return (
+        db.query(LearningUnit)
+        .join(LearningModule, LearningModule.id == LearningUnit.module_id)
+        .join(LearningTrack, LearningTrack.id == LearningModule.track_id)
+        .filter(LearningTrack.target_language_code == target_lang, LearningUnit.cefr_level == effective_level)
+        .order_by(LearningUnit.id.asc())
+        .limit(limit)
+        .all()
+    )
+
+
+def build_click_lesson(db: Session, user: User, unit_id: int) -> dict[str, object] | None:
+    target_lang = resolve_target_language_code(user)
+    unit = (
+        db.query(LearningUnit)
+        .join(LearningModule, LearningModule.id == LearningUnit.module_id)
+        .join(LearningTrack, LearningTrack.id == LearningModule.track_id)
+        .filter(LearningUnit.id == unit_id, LearningTrack.target_language_code == target_lang)
+        .first()
+    )
+    if not unit:
+        return None
+
+    steps = _step_pack(unit.title, unit.learning_objective, unit.primary_skill)
+    progress = get_or_create_unit_progress(db, user.id, unit.id, total_steps=len(steps))
+    return {
+        "unit_id": unit.id,
+        "title": unit.title,
+        "description": unit.description,
+        "cefr_level": unit.cefr_level,
+        "language_code": target_lang,
+        "current_step": progress.current_step,
+        "total_steps": progress.total_steps,
+        "completed": progress.completed,
+        "score": round(progress.score, 2),
+        "steps": steps,
+    }
+
+
+def advance_click_step(db: Session, user: User, unit_id: int, correct: bool, score_delta: float) -> dict[str, object] | None:
+    lesson = build_click_lesson(db, user, unit_id)
+    if not lesson:
+        return None
+    progress = get_or_create_unit_progress(db, user.id, unit_id, total_steps=int(lesson["total_steps"]))
+    if not progress.completed:
+        progress.current_step = min(progress.total_steps, progress.current_step + 1)
+        progress.score = max(0.0, min(100.0, progress.score + (score_delta if correct else max(0.2, score_delta * 0.25))))
+        progress.completed = progress.current_step >= progress.total_steps
+        progress.updated_at = datetime.utcnow()
+        db.add(progress)
+
+    return {
+        "unit_id": unit_id,
+        "current_step": progress.current_step,
+        "total_steps": progress.total_steps,
+        "completed": progress.completed,
+        "score": round(progress.score, 2),
+    }

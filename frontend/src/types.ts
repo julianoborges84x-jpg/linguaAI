@@ -371,3 +371,111 @@ export interface PedagogyDashboardData {
   track_progress: LearningTrackProgress[];
   recommendations: AdaptiveRecommendation[];
 }
+
+export interface CurrentTrackData {
+  track_slug: string;
+  track_title: string;
+  estimated_level: string;
+  entry_profile: string;
+  current_module_id?: number | null;
+  current_lesson_id?: number | null;
+  current_step_index?: number;
+  resume_available?: boolean;
+  next_lesson_id: number | null;
+  completed_lessons: number;
+  total_lessons: number;
+}
+
+export interface ModuleLessonStatus {
+  id: number;
+  title: string;
+  status: string;
+  current_step: number;
+  total_steps: number;
+}
+
+export interface PedagogyModule {
+  id: number;
+  slug: string;
+  title: string;
+  progress_percent: number;
+  lessons: ModuleLessonStatus[];
+}
+
+export interface LessonExample {
+  en: string;
+  pt: string;
+}
+
+export interface LessonExercise {
+  id: string;
+  type: string;
+  prompt: string;
+  hint_pt: string;
+}
+
+export interface LessonDetail {
+  id: number;
+  module_name: string;
+  order_index: number;
+  title: string;
+  lesson_objective: string;
+  cefr_level: string;
+  estimated_duration_min: number;
+  target_vocabulary: string[];
+  key_structures: string[];
+  grammar_explanation_pt: string;
+  examples: LessonExample[];
+  exercises: LessonExercise[];
+  ai_context: Record<string, unknown>;
+  final_review: string[];
+  completion_criteria: {
+    min_exercises_correct: number;
+    min_conversation_turns: number;
+    checkpoint_required: boolean;
+  };
+  progress: {
+    current_step: number;
+    total_steps: number;
+    completed: boolean;
+    score: number;
+  };
+}
+
+export interface LessonSubmitResponse {
+  lesson_id: number;
+  completed: boolean;
+  accuracy: number;
+  next_review_at: string;
+  next_step: string;
+}
+
+export interface LessonStepSaveResponse {
+  lesson_id: number;
+  current_step: number;
+  total_steps: number;
+  completed: boolean;
+  score: number;
+}
+
+export interface ReviewTodayItem {
+  id: number;
+  queue_type: string;
+  reference_id: number;
+  priority: number;
+  due_at: string;
+}
+
+export interface ReviewTodayData {
+  items: ReviewTodayItem[];
+  estimated_minutes: number;
+}
+
+export interface ProgressSummaryData {
+  lesson_progress: { completed: number; total: number };
+  module_completion: number;
+  vocabulary_mastered: number;
+  review_due: number;
+  estimated_level: string;
+  weekly_consistency: number;
+}

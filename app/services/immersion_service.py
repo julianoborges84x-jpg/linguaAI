@@ -263,7 +263,7 @@ def add_turn(db: Session, user: User, session_id: int, message: str) -> dict:
 
     clean_message = message.strip()
     if not clean_message:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Message cannot be empty")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Message cannot be empty")
 
     scenario = db.query(ImmersionScenario).filter(ImmersionScenario.id == session.scenario_id).first()
     character = None
@@ -666,3 +666,4 @@ def landing_page_payload() -> dict:
         ],
         "updated_at": datetime.now(UTC).replace(tzinfo=None),
     }
+

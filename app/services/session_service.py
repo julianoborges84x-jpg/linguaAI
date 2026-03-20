@@ -23,7 +23,7 @@ def start_session(db: Session, user: User, mode: str, topic_id: int | None = Non
     normalized_mode = MODE_ALIASES.get(mode.strip().lower(), mode.strip().lower())
     if normalized_mode not in ALLOWED_MODES:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Invalid session mode",
         )
 
@@ -33,7 +33,7 @@ def start_session(db: Session, user: User, mode: str, topic_id: int | None = Non
     else:
         if not topic_exists(db, topic_id):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Invalid topic_id",
             )
         final_topic_id = topic_id
@@ -99,3 +99,4 @@ def finish_session(db: Session, user: User, session_id: int, interactions_count:
     db.commit()
     db.refresh(session)
     return session
+

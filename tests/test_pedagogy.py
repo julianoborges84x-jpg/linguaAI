@@ -1,4 +1,5 @@
 from app.services.pedagogy_seed import ensure_pedagogical_seed
+from app.models.pedagogy import LearningTrack, VocabularyItem
 
 
 def register_user(client, name, email, password):
@@ -117,3 +118,60 @@ def test_free_vs_pro_locked_recommendation(client, db_session):
     recs_pro = client.get('/pedagogy/recommendations', headers=auth_header(token_pro))
     assert recs_pro.status_code == 200
     assert all(item.get('locked_for_free') is False for item in recs_pro.json())
+
+
+def test_seed_contains_curriculum_for_all_supported_languages(db_session):
+    ensure_pedagogical_seed(db_session)
+    tracks = db_session.query(LearningTrack.target_language_code).distinct().all()
+    langs = {row[0] for row in tracks}
+    assert {"en", "es", "fr", "it"}.issubset(langs)
+
+    vocab_langs = {row[0] for row in db_session.query(VocabularyItem.language_code).distinct().all()}
+    assert {"en", "es", "fr", "it"}.issubset(vocab_langs)
+
+
+def test_click_by_click_learning_flow(client, db_session):
+    ensure_pedagogical_seed(db_session)
+
+    register_user(client, 'Click', 'click@example.com', 'secret123')
+    token = login_user(client, 'click@example.com', 'secret123').json()['access_token']
+
+    # Ensure user studies English path.
+    profile_patch = client.patch(
+        '/users/me',
+        headers=auth_header(token),
+        json={'target_language': 'en', 'timezone': 'America/Sao_Paulo'},
+    )
+    assert profile_patch.status_code == 200
+
+    placement = client.post(
+        '/pedagogy/placement',
+        headers=auth_header(token),
+        json={
+            'sentence_complexity': 0.2,
+            'vocabulary_variety': 0.22,
+            'error_frequency': 0.35,
+            'tense_control': 0.25,
+            'autonomy': 0.3,
+            'clarity': 0.3,
+        },
+    )
+    assert placement.status_code == 200
+
+    path = client.get('/pedagogy/click-path', headers=auth_header(token))
+    assert path.status_code == 200
+    units = path.json()
+    assert len(units) > 0
+    unit_id = units[0]['unit_id']
+
+    lesson = client.get(f'/pedagogy/units/{unit_id}/click-lesson', headers=auth_header(token))
+    assert lesson.status_code == 200
+    assert lesson.json()['total_steps'] >= 5
+
+    advance = client.post(
+        f'/pedagogy/units/{unit_id}/click-lesson/advance',
+        headers=auth_header(token),
+        json={'correct': True, 'score_delta': 2.0},
+    )
+    assert advance.status_code == 200
+    assert advance.json()['current_step'] >= 1

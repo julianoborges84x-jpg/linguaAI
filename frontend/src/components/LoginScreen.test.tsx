@@ -76,4 +76,15 @@ describe('LoginScreen', () => {
     expect(assignSpy).toHaveBeenCalledWith('http://127.0.0.1:8000/auth/oauth/google/start');
     assignSpy.mockRestore();
   });
+
+  it('aciona redirecionamento OAuth no botao Apple', async () => {
+    const user = userEvent.setup();
+    const assignSpy = vi.spyOn(window.location, 'assign').mockImplementation(() => undefined);
+    renderScreen(<LoginScreen onBack={() => undefined} onAuthenticated={() => undefined} defaultMode="register" />);
+
+    const appleButton = await screen.findByRole('button', { name: /Apple/i });
+    await user.click(appleButton);
+    expect(assignSpy).toHaveBeenCalledWith('http://127.0.0.1:8000/auth/oauth/apple/start');
+    assignSpy.mockRestore();
+  });
 });

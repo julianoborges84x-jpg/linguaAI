@@ -171,7 +171,7 @@ def _resolve_oauth_user(
     if not user:
         if not email:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Nao foi possivel criar conta social sem e-mail do provedor.",
             )
         user = User(
@@ -311,3 +311,4 @@ def verify_email(token: str, db: Session = Depends(get_db)):
 @router.get("/me", response_model=UserOut)
 def me(current_user: User = Depends(get_current_user)):
     return current_user
+

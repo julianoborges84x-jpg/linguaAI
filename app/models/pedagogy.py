@@ -26,6 +26,7 @@ class LearningTrack(Base):
     title: Mapped[str] = mapped_column(String(120), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     cefr_level: Mapped[str] = mapped_column(String(8), index=True)
+    target_language_code: Mapped[str] = mapped_column(String(8), index=True, default="en")
 
 
 class LearningModule(Base):
@@ -131,6 +132,7 @@ class VocabularyItem(Base):
     example: Mapped[str] = mapped_column(Text, nullable=False, default="")
     synonyms_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     frequency: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    language_code: Mapped[str] = mapped_column(String(8), index=True, default="en")
 
 
 class VocabularyProgress(Base):
@@ -174,3 +176,16 @@ class ReviewQueue(Base):
     due_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class LearningUnitProgress(Base):
+    __tablename__ = "learning_unit_progress"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    unit_id: Mapped[int] = mapped_column(ForeignKey("learning_units.id"), index=True)
+    current_step: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_steps: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)

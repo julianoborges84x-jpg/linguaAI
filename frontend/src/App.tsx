@@ -12,13 +12,21 @@ import {
   fetchGrowthDashboard,
   fetchAdaptiveRecommendations,
   fetchPedagogyDashboard,
+  fetchCurrentTrack,
+  fetchPedagogyModules,
+  fetchPedagogyModule,
+  fetchPedagogyLesson,
+  savePedagogyLessonStep,
+  submitPedagogyLesson,
+  fetchReviewToday,
+  submitReviewToday,
+  fetchProgressSummary,
   getToken,
   storeToken,
   trackGrowthEvent,
   updateOnboarding,
 } from './api/auth';
 import ChatScreen from './components/ChatScreen';
-import DashboardScreen from './components/DashboardScreen';
 import ImmersionScreen from './components/ImmersionScreen';
 import LandingPage from './components/LandingPage';
 import LessonScreen from './components/LessonScreen';
@@ -33,7 +41,14 @@ import ReferralScreen from './components/ReferralScreen';
 import SettingsScreen from './components/SettingsScreen';
 import TermsPage from './components/TermsPage';
 import LiveTutorScreen from './components/LiveTutorScreen';
-import { AuthUser, DailyChallengeInfo, GrowthDashboardData, PedagogyDashboardData, UserProfile } from './types';
+import { AuthUser, CurrentTrackData, DailyChallengeInfo, GrowthDashboardData, LessonDetail, PedagogyDashboardData, PedagogyModule, ProgressSummaryData, ReviewTodayData, UserProfile } from './types';
+import LearningHome from './components/LearningHome';
+import TrackScreen from './components/TrackScreen';
+import ModuleScreen from './components/ModuleScreen';
+import PedagogyLessonScreen from './components/PedagogyLessonScreen';
+import ReviewTodayScreen from './components/ReviewTodayScreen';
+import ProgressScreen from './components/ProgressScreen';
+import SocialGenScreen from './components/SocialGenScreen';
 
 const STORAGE_KEYS = {
   profile: 'mentor_lingua_profile',
@@ -47,7 +62,7 @@ const languageMap: Record<string, 'en' | 'es' | 'fr' | 'it'> = {
   italiano: 'it',
 };
 
-type DashboardView = 'home' | 'lesson' | 'chat' | 'immersion' | 'real-life' | 'daily-challenge' | 'referral' | 'voice-mentor' | 'settings';
+type DashboardView = 'home' | 'learning-track' | 'learning-module' | 'learning-lesson' | 'review-today' | 'progress' | 'chat' | 'voice-mentor' | 'settings' | 'legacy-lesson' | 'immersion' | 'real-life' | 'daily-challenge' | 'referral';
 type ReferralTrigger = 'daily_challenge_completed' | 'xp_gained' | 'level_up';
 
 function AppShell() {
@@ -67,6 +82,13 @@ function AppShell() {
   const [dailyChallenge, setDailyChallenge] = useState<DailyChallengeInfo | null>(null);
   const [pedagogyData, setPedagogyData] = useState<PedagogyDashboardData | null>(null);
   const [dashboardView, setDashboardView] = useState<DashboardView>('home');
+  const [currentTrack, setCurrentTrack] = useState<CurrentTrackData | null>(null);
+  const [modules, setModules] = useState<PedagogyModule[]>([]);
+  const [activeModule, setActiveModule] = useState<PedagogyModule | null>(null);
+  const [activeLesson, setActiveLesson] = useState<LessonDetail | null>(null);
+  const [reviewToday, setReviewToday] = useState<ReviewTodayData | null>(null);
+  const [progressSummary, setProgressSummary] = useState<ProgressSummaryData | null>(null);
+  const [lessonSubmitting, setLessonSubmitting] = useState(false);
   const [referralPopupOpen, setReferralPopupOpen] = useState(false);
   const [referralTrigger, setReferralTrigger] = useState<ReferralTrigger>('xp_gained');
 
@@ -141,6 +163,24 @@ function AppShell() {
       }
     } catch {
       setPedagogyData(null);
+    }
+    try {
+      const [track, moduleRows, review, summary] = await Promise.all([
+        fetchCurrentTrack(),
+        fetchPedagogyModules(),
+        fetchReviewToday(),
+        fetchProgressSummary(),
+      ]);
+      setCurrentTrack(track);
+      setModules(moduleRows);
+      setReviewToday(review);
+      setProgressSummary(summary);
+    } catch {
+      setCurrentTrack(null);
+      setModules([]);
+      setReviewToday(null);
+      setProgressSummary(null);
+      setAppError('Conteudo pedagogico indisponivel no momento. Execute as migracoes e seed para carregar as aulas.');
     }
     if (options?.detectGrowth && previousUser) {
       if (user.level > previousUser.level) {
@@ -224,7 +264,7 @@ function AppShell() {
       const syncedUser = await ensureOnboarding(user);
       setAuthUser(syncedUser);
       setDashboardView('home');
-      navigate('/dashboard', { replace: true });
+      navigate('/socialgen', { replace: true });
     } catch (error) {
       clearToken();
       setAuthUser(null);
@@ -314,8 +354,111 @@ function AppShell() {
       return <Navigate to="/login" replace />;
     }
 
-    if (dashboardView === 'lesson') {
-      return <LessonScreen onFinish={handleLessonFinished} />;
+
+
+    if (dashboardView === 'learning-track') {
+      return (
+        <TrackScreen
+          modules={modules}
+          currentModuleId={currentTrack?.current_module_id ?? null}
+          onBack={() => setDashboardView('home')}
+          onOpenModule={async (moduleId) => {
+            const detail = await fetchPedagogyModule(moduleId);
+            setActiveModule(detail);
+            setDashboardView('learning-module');
+          }}
+        />
+      );
+    }
+
+    if (dashboardView === 'learning-module') {
+      return (
+        <ModuleScreen
+          module={activeModule}
+          currentLessonId={currentTrack?.current_lesson_id ?? null}
+          onBack={() => setDashboardView('learning-track')}
+          onOpenLesson={async (lessonId) => {
+            const detail = await fetchPedagogyLesson(lessonId);
+            setActiveLesson(detail);
+            setDashboardView('learning-lesson');
+          }}
+        />
+      );
+    }
+
+    if (dashboardView === 'learning-lesson') {
+      return (
+        <PedagogyLessonScreen
+          lesson={activeLesson}
+          submitting={lessonSubmitting}
+          onBack={() => setDashboardView('learning-module')}
+          onPracticeConversation={() => setDashboardView('chat')}
+          onSaveStep={async (lessonId, currentStep) => {
+            await savePedagogyLessonStep(lessonId, { current_step: currentStep });
+            setActiveLesson((prev) => {
+              if (!prev || prev.id !== lessonId) return prev;
+              return {
+                ...prev,
+                progress: {
+                  ...prev.progress,
+                  current_step: currentStep,
+                },
+              };
+            });
+            const track = await fetchCurrentTrack();
+            setCurrentTrack(track);
+          }}
+          onComplete={async (lessonId) => {
+            setLessonSubmitting(true);
+            try {
+              const submit = await submitPedagogyLesson(lessonId, { correct_count: 5, total_count: 6, conversation_turns: 2 });
+              const [moduleRows, review, summary, track] = await Promise.all([
+                fetchPedagogyModules(),
+                fetchReviewToday(),
+                fetchProgressSummary(),
+                fetchCurrentTrack(),
+              ]);
+              setModules(moduleRows);
+              setReviewToday(review);
+              setProgressSummary(summary);
+              setCurrentTrack(track);
+              return {
+                nextLessonId: track.next_lesson_id,
+                xpEarned: Math.max(10, Math.round(submit.accuracy)),
+                reviewCount: review.items.length,
+              };
+            } finally {
+              setLessonSubmitting(false);
+            }
+          }}
+          onOpenNextLesson={async (lessonId) => {
+            const detail = await fetchPedagogyLesson(lessonId);
+            const moduleWithLesson = modules.find((m) => m.lessons.some((l) => l.id === lessonId));
+            if (moduleWithLesson) setActiveModule(moduleWithLesson);
+            setActiveLesson(detail);
+          }}
+          onOpenTrack={() => setDashboardView('learning-track')}
+        />
+      );
+    }
+
+    if (dashboardView === 'review-today') {
+      return (
+        <ReviewTodayScreen
+          data={reviewToday}
+          onBack={() => setDashboardView('home')}
+          onSubmit={async (reviewItemId, correct) => {
+            await submitReviewToday({ review_item_id: reviewItemId, correct });
+            const [review, summary] = await Promise.all([fetchReviewToday(), fetchProgressSummary()]);
+            setReviewToday(review);
+            setProgressSummary(summary);
+          }}
+        />
+      );
+    }
+
+    if (dashboardView === 'progress') {
+      return <ProgressScreen data={progressSummary} onBack={() => setDashboardView('home')} />;
     }
 
     if (dashboardView === 'chat') {
@@ -389,51 +532,46 @@ function AppShell() {
     };
 
     return (
-      <>
-        <DashboardScreen
-          user={authUser}
-          growthData={growthData}
-          dailyChallenge={dailyChallenge}
-          pedagogyData={pedagogyData}
-          stripeConfigured={stripeConfigured}
-          billingLoading={billingLoading}
-          onStartLesson={() => setDashboardView('lesson')}
-          onOpenChat={() => setDashboardView('chat')}
-          onOpenImmersion={() => setDashboardView('immersion')}
-          onOpenRealLife={() => setDashboardView('real-life')}
-          onOpenDailyChallenge={() => setDashboardView('daily-challenge')}
-          onOpenReferral={() => setDashboardView('referral')}
-          onOpenVoiceMentor={() => setDashboardView('voice-mentor')}
-          onOpenSettings={() => setDashboardView('settings')}
-          onReferralCopy={() => handleReferralCopy('dashboard_card')}
-          onReferralSend={() => handleReferralSend('dashboard_card')}
-          onUpgrade={handleUpgrade}
-          onOpenPedagogyRecommendation={() => setDashboardView('chat')}
-          onOpenVocabularyReview={() => setDashboardView('chat')}
-          onManageSubscription={handleManageSubscription}
-          onCancelSubscription={handleCancelSubscription}
-          onLogout={handleLogout}
-          appError={appError}
-        />
-        <ReferralPromptModal
-          open={referralPopupOpen}
-          trigger={referralTrigger}
-          onClose={() => setReferralPopupOpen(false)}
-          onCopy={async () => {
-            await handleReferralCopy('referral_popup');
-            setReferralPopupOpen(false);
-          }}
-          onSend={async () => {
-            await handleReferralSend('referral_popup');
-            setReferralPopupOpen(false);
-          }}
-          onOpenReferral={() => {
-            setReferralPopupOpen(false);
-            setDashboardView('referral');
-          }}
-        />
-      </>
+      <LearningHome
+        user={authUser}
+        track={currentTrack}
+        pedagogy={pedagogyData}
+        summary={progressSummary}
+        reviewToday={reviewToday}
+        appError={appError}
+        onContinue={async () => {
+          const targetLessonId = currentTrack?.current_lesson_id || currentTrack?.next_lesson_id;
+          if (targetLessonId) {
+            const detail = await fetchPedagogyLesson(targetLessonId);
+            setActiveLesson(detail);
+            const moduleWithLesson = modules.find((m) => m.lessons.some((l) => l.id === targetLessonId));
+            if (moduleWithLesson) setActiveModule(moduleWithLesson);
+            setDashboardView('learning-lesson');
+            return;
+          }
+          setDashboardView('learning-track');
+        }}
+        onReviewErrors={() => setDashboardView('review-today')}
+        onOpenTrack={() => setDashboardView('learning-track')}
+      />
     );
+  };
+
+  const socialGenElement = () => {
+    if (booting) {
+      return (
+        <div className="min-h-screen bg-background-light flex items-center justify-center">
+          <div className="rounded-2xl bg-white px-6 py-5 shadow-sm border border-slate-200 text-center">
+            <p className="text-sm font-semibold text-slate-500 uppercase tracking-[0.2em]">LinguaAI</p>
+            <p className="mt-2 text-lg font-bold text-slate-900">Carregando sua sessao...</p>
+          </div>
+        </div>
+      );
+    }
+    if (!authUser) {
+      return <Navigate to="/login" replace />;
+    }
+    return <SocialGenScreen onContinue={() => navigate('/dashboard')} />;
   };
 
   return (
@@ -455,6 +593,10 @@ function AppShell() {
             defaultMode={hasOnboardingProfile ? 'register' : 'login'}
           />
         }
+      />
+      <Route
+        path="/socialgen"
+        element={socialGenElement()}
       />
       <Route path="/dashboard" element={dashboardElement()} />
       <Route path="*" element={<Navigate to="/" replace />} />
