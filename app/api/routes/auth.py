@@ -1,9 +1,9 @@
 from datetime import UTC, datetime, timedelta
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 import secrets
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from jose import JWTError, jwt
@@ -38,20 +38,48 @@ class OAuthLoginOut(TokenOut):
     user: UserOut
 
 
-def _oauth_redirect_uri(provider: str) -> str:
-    return f"{settings.frontend_url.rstrip('/')}/login/oauth/{provider}/callback"
+def _is_allowed_frontend_origin(origin: str) -> bool:
+    try:
+        parsed = urlparse(origin)
+    except Exception:
+        return False
+
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    host = (parsed.hostname or "").strip().lower()
+    if not host:
+        return False
+
+    allowed_host = (urlparse(settings.frontend_url).hostname or "").strip().lower()
+    if host in {"localhost", "127.0.0.1"}:
+        return True
+    if host.endswith(".vercel.app"):
+        return True
+    return bool(allowed_host and host == allowed_host)
 
 
-def _encode_state(provider: str) -> str:
+def _resolve_frontend_origin(redirect_origin: str | None) -> str:
+    if redirect_origin and _is_allowed_frontend_origin(redirect_origin.strip()):
+        return redirect_origin.strip().rstrip("/")
+    return settings.frontend_url.rstrip("/")
+
+
+def _oauth_redirect_uri(provider: str, frontend_origin: str | None = None) -> str:
+    origin = _resolve_frontend_origin(frontend_origin)
+    return f"{origin}/login/oauth/{provider}/callback"
+
+
+def _encode_state(provider: str, redirect_uri: str) -> str:
     payload = {
         "provider": provider,
+        "redirect_uri": redirect_uri,
         "nonce": secrets.token_urlsafe(12),
         "exp": datetime.now(UTC) + timedelta(minutes=10),
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
-def _validate_state(provider: str, state: str) -> None:
+def _validate_state(provider: str, state: str) -> dict:
     try:
         payload = jwt.decode(state, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
     except JWTError as exc:
@@ -60,6 +88,7 @@ def _validate_state(provider: str, state: str) -> None:
     token_provider = str(payload.get("provider") or "").strip().lower()
     if token_provider != provider:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OAuth state nao corresponde ao provedor.")
+    return payload
 
 
 def _oauth_enabled(provider: str) -> bool:
@@ -90,12 +119,12 @@ def _build_apple_client_secret() -> str:
     return jwt.encode(payload, private_key, algorithm="ES256", headers=headers)
 
 
-def _exchange_google_code(code: str) -> tuple[str | None, str | None, str | None]:
+def _exchange_google_code(code: str, redirect_uri: str) -> tuple[str | None, str | None, str | None]:
     token_payload = {
         "code": code,
         "client_id": settings.oauth_google_client_id,
         "client_secret": settings.oauth_google_client_secret,
-        "redirect_uri": _oauth_redirect_uri("google"),
+        "redirect_uri": redirect_uri,
         "grant_type": "authorization_code",
     }
 
@@ -123,14 +152,14 @@ def _exchange_google_code(code: str) -> tuple[str | None, str | None, str | None
     return email, name, subject
 
 
-def _exchange_apple_code(code: str) -> tuple[str | None, str | None, str | None]:
+def _exchange_apple_code(code: str, redirect_uri: str) -> tuple[str | None, str | None, str | None]:
     client_secret = _build_apple_client_secret()
     token_payload = {
         "client_id": settings.oauth_apple_client_id,
         "client_secret": client_secret,
         "code": code,
         "grant_type": "authorization_code",
-        "redirect_uri": _oauth_redirect_uri("apple"),
+        "redirect_uri": redirect_uri,
     }
 
     with httpx.Client(timeout=15.0) as client:
@@ -217,7 +246,7 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
 
 
 @router.get("/oauth/{provider}/start")
-def oauth_start(provider: str):
+def oauth_start(provider: str, redirect_origin: str | None = Query(default=None)):
     provider = provider.strip().lower()
     if provider not in {"google", "apple"}:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="OAuth provider not supported.")
@@ -228,8 +257,8 @@ def oauth_start(provider: str):
             detail=f"OAuth {provider.title()} nao configurado no servidor.",
         )
 
-    state = _encode_state(provider)
-    redirect_uri = _oauth_redirect_uri(provider)
+    redirect_uri = _oauth_redirect_uri(provider, redirect_origin)
+    state = _encode_state(provider, redirect_uri)
 
     if provider == "google":
         params = {
@@ -274,12 +303,13 @@ def oauth_callback(provider: str, payload: OAuthCodeIn, db: Session = Depends(ge
             detail=f"OAuth {provider.title()} nao configurado no servidor.",
         )
 
-    _validate_state(provider, payload.state)
+    state_payload = _validate_state(provider, payload.state)
+    redirect_uri = str(state_payload.get("redirect_uri") or _oauth_redirect_uri(provider))
 
     if provider == "google":
-        email, name, subject = _exchange_google_code(payload.code)
+        email, name, subject = _exchange_google_code(payload.code, redirect_uri)
     else:
-        email, name, subject = _exchange_apple_code(payload.code)
+        email, name, subject = _exchange_apple_code(payload.code, redirect_uri)
 
     user, created = _resolve_oauth_user(db, provider, subject, email, name)
     token = create_access_token(str(user.id))

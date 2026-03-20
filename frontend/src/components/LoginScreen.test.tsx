@@ -73,7 +73,7 @@ describe('LoginScreen', () => {
 
     const googleButton = await screen.findByRole('button', { name: /Google/i });
     await user.click(googleButton);
-    expect(assignSpy).toHaveBeenCalledWith('http://127.0.0.1:8000/auth/oauth/google/start');
+    expect(assignSpy).toHaveBeenCalledWith(`http://127.0.0.1:8000/auth/oauth/google/start?redirect_origin=${encodeURIComponent(window.location.origin)}`);
     assignSpy.mockRestore();
   });
 
@@ -84,7 +84,7 @@ describe('LoginScreen', () => {
 
     const appleButton = await screen.findByRole('button', { name: /Apple/i });
     await user.click(appleButton);
-    expect(assignSpy).toHaveBeenCalledWith('http://127.0.0.1:8000/auth/oauth/apple/start');
+    expect(assignSpy).toHaveBeenCalledWith(`http://127.0.0.1:8000/auth/oauth/apple/start?redirect_origin=${encodeURIComponent(window.location.origin)}`);
     assignSpy.mockRestore();
   });
 });

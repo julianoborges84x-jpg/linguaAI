@@ -29,7 +29,6 @@ import {
 import ChatScreen from './components/ChatScreen';
 import ImmersionScreen from './components/ImmersionScreen';
 import LandingPage from './components/LandingPage';
-import LessonScreen from './components/LessonScreen';
 import LoginScreen from './components/LoginScreen';
 import OAuthCallbackScreen from './components/OAuthCallbackScreen';
 import PrivacyPage from './components/PrivacyPage';
@@ -48,7 +47,6 @@ import ModuleScreen from './components/ModuleScreen';
 import PedagogyLessonScreen from './components/PedagogyLessonScreen';
 import ReviewTodayScreen from './components/ReviewTodayScreen';
 import ProgressScreen from './components/ProgressScreen';
-import SocialGenScreen from './components/SocialGenScreen';
 
 const STORAGE_KEYS = {
   profile: 'mentor_lingua_profile',
@@ -264,7 +262,7 @@ function AppShell() {
       const syncedUser = await ensureOnboarding(user);
       setAuthUser(syncedUser);
       setDashboardView('home');
-      navigate('/socialgen', { replace: true });
+      navigate('/dashboard', { replace: true });
     } catch (error) {
       clearToken();
       setAuthUser(null);
@@ -557,23 +555,6 @@ function AppShell() {
     );
   };
 
-  const socialGenElement = () => {
-    if (booting) {
-      return (
-        <div className="min-h-screen bg-background-light flex items-center justify-center">
-          <div className="rounded-2xl bg-white px-6 py-5 shadow-sm border border-slate-200 text-center">
-            <p className="text-sm font-semibold text-slate-500 uppercase tracking-[0.2em]">LinguaAI</p>
-            <p className="mt-2 text-lg font-bold text-slate-900">Carregando sua sessao...</p>
-          </div>
-        </div>
-      );
-    }
-    if (!authUser) {
-      return <Navigate to="/login" replace />;
-    }
-    return <SocialGenScreen onContinue={() => navigate('/dashboard')} />;
-  };
-
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
@@ -593,10 +574,6 @@ function AppShell() {
             defaultMode={hasOnboardingProfile ? 'register' : 'login'}
           />
         }
-      />
-      <Route
-        path="/socialgen"
-        element={socialGenElement()}
       />
       <Route path="/dashboard" element={dashboardElement()} />
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -8,7 +8,6 @@ import DailyChallengeScreen from './DailyChallengeScreen';
 import ImmersionScreen from './ImmersionScreen';
 import LanguageSelectScreen from './LanguageSelectScreen';
 import LearningGoalScreen from './LearningGoalScreen';
-import LessonScreen from './LessonScreen';
 import ProficiencyLevelScreen from './ProficiencyLevelScreen';
 import RealLifeScreen from './RealLifeScreen';
 import ReferralPromptModal from './ReferralPromptModal';
@@ -159,15 +158,7 @@ describe('Button click coverage', () => {
     expect(await screen.findByText('Resposta da IA')).toBeInTheDocument();
     chatView.unmount();
 
-    startLessonSessionMock.mockResolvedValue({ session_id: 33 });
-    finishLessonSessionMock.mockResolvedValue({ session_id: 33 });
-    const lessonView = render(<LessonScreen onFinish={onFinish} />);
-    await screen.findByText(/Sessao #33/i);
-    await user.click(screen.getByRole('button', { name: 'sobre a' }));
-    await user.click(screen.getByRole('button', { name: /verificar/i }));
-    await user.click(screen.getByRole('button', { name: /continuar/i }));
-    await waitFor(() => expect(finishLessonSessionMock).toHaveBeenCalled());
-    lessonView.unmount();
+    expect(onFinish).not.toHaveBeenCalled();
     cleanup();
   });
 

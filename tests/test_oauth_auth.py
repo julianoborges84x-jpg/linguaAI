@@ -60,6 +60,21 @@ def test_google_oauth_creates_user_and_logs_in(client, monkeypatch):
     assert payload["user"]["google_sub"] == "google-sub-1"
 
 
+def test_google_oauth_start_uses_redirect_origin_when_allowed(client):
+    settings.oauth_google_client_id = "google-client"
+    settings.oauth_google_client_secret = "google-secret"
+    start = client.get(
+        "/auth/oauth/google/start",
+        params={"redirect_origin": "https://linguaai-app-one.vercel.app"},
+        follow_redirects=False,
+    )
+    assert start.status_code == 307
+    location = start.headers["location"]
+    parsed = urlparse(location)
+    redirect_uri = parse_qs(parsed.query).get("redirect_uri", [""])[0]
+    assert redirect_uri == "https://linguaai-app-one.vercel.app/login/oauth/google/callback"
+
+
 def test_google_oauth_logs_existing_user(client, monkeypatch):
     settings.oauth_google_client_id = "google-client"
     settings.oauth_google_client_secret = "google-secret"

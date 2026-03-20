@@ -113,7 +113,8 @@ export default function LoginScreen({ onBack, onAuthenticated, defaultMode = 'lo
   const handleOAuth = (provider: 'google' | 'apple') => {
     setOauthLoading(provider);
     setFeedback('');
-    window.location.assign(`${API_URL}/auth/oauth/${provider}/start`);
+    const redirectOrigin = encodeURIComponent(window.location.origin);
+    window.location.assign(`${API_URL}/auth/oauth/${provider}/start?redirect_origin=${redirectOrigin}`);
   };
 
   return (

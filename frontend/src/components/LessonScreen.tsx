@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { ArrowRight, Bolt, GraduationCap, Trophy, User, Volume2, X } from 'lucide-react';
