@@ -6,6 +6,7 @@ from app.models.analytics_event import AnalyticsEvent
 from app.models.study_session import StudySession
 from app.models.user import PlanEnum, User
 from app.services.growth_service import ensure_referral_code
+from app.services.growth_service import weekly_leaderboard
 
 
 def _register_and_login(client, email: str, password: str = "Teste123!"):
@@ -136,6 +137,63 @@ def test_weekly_leaderboard_orders_by_xp(client, db_session):
     items = leaderboard.json()
     assert items[0]["name"] == "Bruno"
     assert items[0]["xp_week"] >= items[1]["xp_week"]
+
+
+def test_weekly_leaderboard_filter_applied_before_limit(db_session):
+    now = datetime.now(UTC).replace(tzinfo=None)
+    users = [
+        User(
+            name="EN 1",
+            email="en1@example.com",
+            password_hash=hash_password("Teste123!"),
+            plan=PlanEnum.FREE,
+            level=1,
+            xp_total=120,
+            timezone="America/Sao_Paulo",
+            onboarding_completed=True,
+            target_language_code="en",
+            referral_code="EN10001",
+        ),
+        User(
+            name="ES 1",
+            email="es1@example.com",
+            password_hash=hash_password("Teste123!"),
+            plan=PlanEnum.FREE,
+            level=1,
+            xp_total=120,
+            timezone="America/Sao_Paulo",
+            onboarding_completed=True,
+            target_language_code="es",
+            referral_code="ES10001",
+        ),
+    ]
+    db_session.add_all(users)
+    db_session.flush()
+    db_session.add_all(
+        [
+            StudySession(
+                user_id=users[0].id,
+                mode="writing",
+                started_at=now - timedelta(minutes=20),
+                finished_at=now - timedelta(minutes=10),
+                interactions_count=3,
+                xp_earned=40,
+            ),
+            StudySession(
+                user_id=users[1].id,
+                mode="writing",
+                started_at=now - timedelta(minutes=22),
+                finished_at=now - timedelta(minutes=11),
+                interactions_count=4,
+                xp_earned=80,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    items = weekly_leaderboard(db_session, limit=10, target_language_code="en")
+    assert len(items) == 1
+    assert items[0]["target_language_code"] == "en"
 
 
 def test_public_growth_conversion_events_allowlisted(client, db_session):

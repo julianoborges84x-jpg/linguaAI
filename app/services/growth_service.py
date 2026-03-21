@@ -221,11 +221,12 @@ def weekly_leaderboard(db: Session, limit: int = 10, target_language_code: str |
         )
         .group_by(User.id, User.name, User.target_language_code)
         .order_by(func.coalesce(func.sum(StudySession.xp_earned), 0).desc(), User.id.asc())
-        .limit(limit)
     )
 
     if target_language_code:
         query = query.filter(User.target_language_code == target_language_code)
+
+    query = query.limit(limit)
 
     rows = query.all()
     return [

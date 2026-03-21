@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.pedagogy import LearningModule, LearningTrack, LearningUnit, LearningUnitProgress, ReviewQueue
@@ -168,7 +169,10 @@ def _ordered_a1_units(db: Session, user: User) -> list[LearningUnit]:
         db.query(LearningUnit)
         .join(LearningModule, LearningModule.id == LearningUnit.module_id)
         .join(LearningTrack, LearningTrack.id == LearningModule.track_id)
-        .filter(LearningUnit.cefr_level == "A1", LearningTrack.target_language_code == target_lang)
+        .filter(
+            LearningUnit.cefr_level == "A1",
+            LearningTrack.target_language_code == target_lang,
+        )
         .order_by(LearningUnit.id.asc())
         .limit(24)
         .all()
@@ -176,20 +180,48 @@ def _ordered_a1_units(db: Session, user: User) -> list[LearningUnit]:
 
 
 def _get_or_create_progress(db: Session, user_id: int, unit_id: int) -> LearningUnitProgress:
-    row = (
+    existing = (
         db.query(LearningUnitProgress)
-        .filter(LearningUnitProgress.user_id == user_id, LearningUnitProgress.unit_id == unit_id)
+        .filter(
+            LearningUnitProgress.user_id == user_id,
+            LearningUnitProgress.unit_id == unit_id,
+        )
         .first()
     )
-    if row:
-        return row
-    row = LearningUnitProgress(user_id=user_id, unit_id=unit_id, current_step=0, total_steps=10, completed=False, score=0.0)
-    db.add(row)
-    db.flush()
-    return row
+    if existing:
+        return existing
+
+    progress = LearningUnitProgress(
+        user_id=user_id,
+        unit_id=unit_id,
+        current_step=0,
+        total_steps=10,
+        completed=False,
+        score=0.0,
+    )
+    db.add(progress)
+
+    try:
+        db.flush()
+        return progress
+    except IntegrityError:
+        db.rollback()
+        existing_after_race = (
+            db.query(LearningUnitProgress)
+            .filter(
+                LearningUnitProgress.user_id == user_id,
+                LearningUnitProgress.unit_id == unit_id,
+            )
+            .first()
+        )
+        if existing_after_race:
+            return existing_after_race
+        raise
 
 
-def _module_id_for_lesson(modules: list[dict[str, Any]], lesson_id: int) -> int | None:
+def _module_id_for_lesson(modules: list[dict[str, Any]], lesson_id: int | None) -> int | None:
+    if lesson_id is None:
+        return None
     for module in modules:
         for lesson in module.get("lessons", []):
             if int(lesson.get("id")) == int(lesson_id):
@@ -201,30 +233,34 @@ def get_current_track(db: Session, user: User) -> dict[str, Any]:
     profile = get_or_create_learner_profile(db, user.id)
     units = _ordered_a1_units(db, user)
     module_rows = get_modules(db, user)
+
     completed = 0
     current_lesson_id: int | None = None
     current_step_index = 0
     resume_available = False
+
     for unit in units:
         progress = _get_or_create_progress(db, user.id, unit.id)
         if progress.completed:
             completed += 1
-        if not progress.completed and progress.current_step > 0 and not resume_available:
+            continue
+
+        if progress.current_step > 0 and not resume_available:
             current_lesson_id = unit.id
             current_step_index = progress.current_step
             resume_available = True
 
-    next_lesson = units[0].id if units else None
+    next_lesson_id: int | None = None
     for unit in units:
         progress = _get_or_create_progress(db, user.id, unit.id)
         if not progress.completed:
-            next_lesson = unit.id
+            next_lesson_id = unit.id
             break
 
     if current_lesson_id is None:
-        current_lesson_id = next_lesson
+        current_lesson_id = next_lesson_id
 
-    current_module_id = _module_id_for_lesson(module_rows, current_lesson_id) if current_lesson_id else None
+    current_module_id = _module_id_for_lesson(module_rows, current_lesson_id)
 
     return {
         "track_slug": "english-foundations-a1",
@@ -235,7 +271,7 @@ def get_current_track(db: Session, user: User) -> dict[str, Any]:
         "current_lesson_id": current_lesson_id,
         "current_step_index": current_step_index,
         "resume_available": resume_available,
-        "next_lesson_id": next_lesson,
+        "next_lesson_id": next_lesson_id,
         "completed_lessons": completed,
         "total_lessons": len(units),
     }
@@ -245,24 +281,39 @@ def get_modules(db: Session, user: User) -> list[dict[str, Any]]:
     units = _ordered_a1_units(db, user)
     grouped: list[dict[str, Any]] = []
     cursor = 0
+
+    first_unfinished_seen = False
+
     for idx, (slug, name, lesson_titles) in enumerate(MODULE_BLUEPRINT, start=1):
         chunk = units[cursor : cursor + len(lesson_titles)]
         cursor += len(lesson_titles)
+
         done = 0
-        lessons = []
+        lessons: list[dict[str, Any]] = []
+
         for unit in chunk:
-            p = _get_or_create_progress(db, user.id, unit.id)
-            if p.completed:
+            progress = _get_or_create_progress(db, user.id, unit.id)
+
+            if progress.completed:
                 done += 1
+                status = "concluida"
+            else:
+                if not first_unfinished_seen:
+                    status = "disponivel"
+                    first_unfinished_seen = True
+                else:
+                    status = "bloqueada"
+
             lessons.append(
                 {
                     "id": unit.id,
                     "title": unit.title,
-                    "status": "concluida" if p.completed else ("disponivel" if done == len(lessons) else "bloqueada"),
-                    "current_step": p.current_step,
-                    "total_steps": p.total_steps,
+                    "status": status,
+                    "current_step": progress.current_step,
+                    "total_steps": progress.total_steps,
                 }
             )
+
         grouped.append(
             {
                 "id": idx,
@@ -272,6 +323,7 @@ def get_modules(db: Session, user: User) -> list[dict[str, Any]]:
                 "lessons": lessons,
             }
         )
+
     return grouped
 
 
@@ -287,17 +339,21 @@ def get_lesson_detail(db: Session, user: User, lesson_id: int) -> dict[str, Any]
     unit = db.query(LearningUnit).filter(LearningUnit.id == lesson_id).first()
     if not unit:
         return None
+
     module_name = "English Foundations A1"
-    order = 1
+    order_index = 1
+
     module_rows = get_modules(db, user)
     for module in module_rows:
-        for i, lesson in enumerate(module["lessons"], start=1):
+        for index, lesson in enumerate(module["lessons"], start=1):
             if int(lesson["id"]) == int(lesson_id):
                 module_name = module["title"]
-                order = i
+                order_index = index
                 break
-    payload = _lesson_payload(unit, module_name, order)
+
+    payload = _lesson_payload(unit, module_name, order_index)
     progress = _get_or_create_progress(db, user.id, lesson_id)
+
     payload["progress"] = {
         "current_step": progress.current_step,
         "total_steps": progress.total_steps,
@@ -307,12 +363,21 @@ def get_lesson_detail(db: Session, user: User, lesson_id: int) -> dict[str, Any]
     return payload
 
 
-def submit_lesson(db: Session, user: User, lesson_id: int, correct_count: int, total_count: int, conversation_turns: int) -> dict[str, Any] | None:
+def submit_lesson(
+    db: Session,
+    user: User,
+    lesson_id: int,
+    correct_count: int,
+    total_count: int,
+    conversation_turns: int,
+) -> dict[str, Any] | None:
     lesson = get_lesson_detail(db, user, lesson_id)
     if not lesson:
         return None
+
     progress = _get_or_create_progress(db, user.id, lesson_id)
     accuracy = (correct_count / max(1, total_count)) * 100.0
+
     progress.current_step = progress.total_steps
     progress.score = max(progress.score, min(100.0, accuracy))
     progress.completed = correct_count >= 4 and conversation_turns >= 2
@@ -329,33 +394,33 @@ def submit_lesson(db: Session, user: User, lesson_id: int, correct_count: int, t
             status="pending",
         )
         db.add(review)
+        next_review_at = review.due_at
     else:
-        db.add(
-            ReviewQueue(
-                user_id=user.id,
-                queue_type="lesson_vocab_review",
-                reference_id=lesson_id,
-                priority=2,
-                due_at=datetime.utcnow() + timedelta(hours=18),
-                status="pending",
-            )
+        vocab_review = ReviewQueue(
+            user_id=user.id,
+            queue_type="lesson_vocab_review",
+            reference_id=lesson_id,
+            priority=2,
+            due_at=datetime.utcnow() + timedelta(hours=18),
+            status="pending",
         )
-        db.add(
-            ReviewQueue(
-                user_id=user.id,
-                queue_type="lesson_key_phrase_review",
-                reference_id=lesson_id,
-                priority=2,
-                due_at=datetime.utcnow() + timedelta(days=1),
-                status="pending",
-            )
+        phrase_review = ReviewQueue(
+            user_id=user.id,
+            queue_type="lesson_key_phrase_review",
+            reference_id=lesson_id,
+            priority=2,
+            due_at=datetime.utcnow() + timedelta(days=1),
+            status="pending",
         )
+        db.add(vocab_review)
+        db.add(phrase_review)
+        next_review_at = vocab_review.due_at
 
     return {
         "lesson_id": lesson_id,
         "completed": progress.completed,
         "accuracy": round(accuracy, 1),
-        "next_review_at": (datetime.utcnow() + timedelta(hours=6)).isoformat(),
+        "next_review_at": next_review_at.isoformat(),
         "next_step": "next_lesson" if progress.completed else "review_lesson",
     }
 
@@ -364,11 +429,13 @@ def save_lesson_step(db: Session, user: User, lesson_id: int, current_step: int)
     lesson = get_lesson_detail(db, user, lesson_id)
     if not lesson:
         return None
+
     progress = _get_or_create_progress(db, user.id, lesson_id)
     bounded_step = max(0, min(current_step, progress.total_steps))
     progress.current_step = bounded_step
     progress.updated_at = datetime.utcnow()
     db.add(progress)
+
     return {
         "lesson_id": lesson_id,
         "current_step": progress.current_step,
@@ -382,11 +449,16 @@ def get_review_today(db: Session, user: User) -> dict[str, Any]:
     now = datetime.utcnow()
     items = (
         db.query(ReviewQueue)
-        .filter(ReviewQueue.user_id == user.id, ReviewQueue.status == "pending", ReviewQueue.due_at <= now)
+        .filter(
+            ReviewQueue.user_id == user.id,
+            ReviewQueue.status == "pending",
+            ReviewQueue.due_at <= now,
+        )
         .order_by(ReviewQueue.priority.desc(), ReviewQueue.due_at.asc())
         .limit(30)
         .all()
     )
+
     payload = [
         {
             "id": item.id,
@@ -397,6 +469,7 @@ def get_review_today(db: Session, user: User) -> dict[str, Any]:
         }
         for item in items
     ]
+
     return {
         "items": payload,
         "estimated_minutes": max(5, len(payload) * 2),
@@ -404,9 +477,17 @@ def get_review_today(db: Session, user: User) -> dict[str, Any]:
 
 
 def submit_review_item(db: Session, user: User, review_item_id: int, correct: bool) -> dict[str, Any] | None:
-    row = db.query(ReviewQueue).filter(ReviewQueue.id == review_item_id, ReviewQueue.user_id == user.id).first()
+    row = (
+        db.query(ReviewQueue)
+        .filter(
+            ReviewQueue.id == review_item_id,
+            ReviewQueue.user_id == user.id,
+        )
+        .first()
+    )
     if not row:
         return None
+
     if correct:
         row.status = "done"
         next_due = datetime.utcnow() + timedelta(days=2)
@@ -414,23 +495,35 @@ def submit_review_item(db: Session, user: User, review_item_id: int, correct: bo
         row.priority = min(5, row.priority + 1)
         row.due_at = datetime.utcnow() + timedelta(hours=8)
         next_due = row.due_at
+
     db.add(row)
-    return {"review_item_id": review_item_id, "correct": correct, "next_review_at": next_due.isoformat()}
+    return {
+        "review_item_id": review_item_id,
+        "correct": correct,
+        "next_review_at": next_due.isoformat(),
+    }
 
 
 def progress_summary(db: Session, user: User) -> dict[str, Any]:
     units = _ordered_a1_units(db, user)
     completed = 0
     mastered_vocab = 0
+
     for unit in units:
-        p = _get_or_create_progress(db, user.id, unit.id)
-        if p.completed:
+        progress = _get_or_create_progress(db, user.id, unit.id)
+        if progress.completed:
             completed += 1
+
     due_review = (
         db.query(ReviewQueue)
-        .filter(ReviewQueue.user_id == user.id, ReviewQueue.status == "pending", ReviewQueue.due_at <= datetime.utcnow())
+        .filter(
+            ReviewQueue.user_id == user.id,
+            ReviewQueue.status == "pending",
+            ReviewQueue.due_at <= datetime.utcnow(),
+        )
         .count()
     )
+
     return {
         "lesson_progress": {"completed": completed, "total": len(units)},
         "module_completion": round((completed / max(1, len(units))) * 100),
