@@ -41,7 +41,7 @@ import SettingsScreen from './components/SettingsScreen';
 import TermsPage from './components/TermsPage';
 import LiveTutorScreen from './components/LiveTutorScreen';
 import { AuthUser, CurrentTrackData, DailyChallengeInfo, GrowthDashboardData, LessonDetail, PedagogyDashboardData, PedagogyModule, ProgressSummaryData, ReviewTodayData, UserProfile } from './types';
-import LearningHome from './components/LearningHome';
+import DashboardScreen from './components/DashboardScreen';
 import TrackScreen from './components/TrackScreen';
 import ModuleScreen from './components/ModuleScreen';
 import PedagogyLessonScreen from './components/PedagogyLessonScreen';
@@ -530,28 +530,55 @@ function AppShell() {
     };
 
     return (
-      <LearningHome
-        user={authUser}
-        track={currentTrack}
-        pedagogy={pedagogyData}
-        summary={progressSummary}
-        reviewToday={reviewToday}
-        appError={appError}
-        onContinue={async () => {
-          const targetLessonId = currentTrack?.current_lesson_id || currentTrack?.next_lesson_id;
-          if (targetLessonId) {
-            const detail = await fetchPedagogyLesson(targetLessonId);
-            setActiveLesson(detail);
-            const moduleWithLesson = modules.find((m) => m.lessons.some((l) => l.id === targetLessonId));
-            if (moduleWithLesson) setActiveModule(moduleWithLesson);
-            setDashboardView('learning-lesson');
-            return;
-          }
-          setDashboardView('learning-track');
-        }}
-        onReviewErrors={() => setDashboardView('review-today')}
-        onOpenTrack={() => setDashboardView('learning-track')}
-      />
+      <>
+        <DashboardScreen
+          user={authUser}
+          growthData={growthData}
+          dailyChallenge={dailyChallenge}
+          pedagogyData={pedagogyData}
+          stripeConfigured={stripeConfigured}
+          billingLoading={billingLoading}
+          appError={appError}
+          onStartLesson={async () => {
+            const targetLessonId = currentTrack?.current_lesson_id || currentTrack?.next_lesson_id;
+            if (targetLessonId) {
+              const detail = await fetchPedagogyLesson(targetLessonId);
+              setActiveLesson(detail);
+              const moduleWithLesson = modules.find((m) => m.lessons.some((l) => l.id === targetLessonId));
+              if (moduleWithLesson) setActiveModule(moduleWithLesson);
+              setDashboardView('learning-lesson');
+              return;
+            }
+            setDashboardView('learning-track');
+          }}
+          onOpenChat={() => setDashboardView('chat')}
+          onOpenImmersion={() => setDashboardView('immersion')}
+          onOpenRealLife={() => setDashboardView('real-life')}
+          onOpenDailyChallenge={() => setDashboardView('daily-challenge')}
+          onOpenReferral={() => setDashboardView('referral')}
+          onOpenVoiceMentor={() => setDashboardView('voice-mentor')}
+          onOpenSettings={() => setDashboardView('settings')}
+          onReferralCopy={() => handleReferralCopy('dashboard')}
+          onReferralSend={() => handleReferralSend('dashboard')}
+          onUpgrade={handleUpgrade}
+          onOpenPedagogyRecommendation={() => setDashboardView('learning-track')}
+          onOpenVocabularyReview={() => setDashboardView('review-today')}
+          onManageSubscription={handleManageSubscription}
+          onCancelSubscription={handleCancelSubscription}
+          onLogout={handleLogout}
+        />
+        <ReferralPromptModal
+          open={referralPopupOpen}
+          trigger={referralTrigger}
+          onClose={() => setReferralPopupOpen(false)}
+          onCopy={() => handleReferralCopy('modal')}
+          onSend={() => handleReferralSend('modal')}
+          onOpenReferral={() => {
+            setReferralPopupOpen(false);
+            setDashboardView('referral');
+          }}
+        />
+      </>
     );
   };
 

@@ -175,8 +175,9 @@ describe('App routes', () => {
 
     render(<App />);
 
-    await waitFor(() => expect(screen.getByText(/Hello,\s*Maria/i)).toBeInTheDocument());
-    expect(screen.getByText(/Painel de Aprendizagem/i)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Maria' })).toBeInTheDocument());
+    expect(screen.getByText(/Sessao ativa/i)).toBeInTheDocument();
+    expect(screen.getByText(/Atalhos/i)).toBeInTheDocument();
     expect(window.location.pathname).toBe('/dashboard');
   });
 

@@ -60,6 +60,11 @@ export async function apiRequest<T>(
   const token = getToken();
   const finalHeaders = new Headers(headers);
 
+  // Evita chamadas autenticadas sem token, que sempre resultariam em 401.
+  if (authenticated && !token) {
+    throw new Error('Sessao ausente.');
+  }
+
   // JSON automático
   if (!isForm && !finalHeaders.has('Content-Type') && body !== undefined) {
     finalHeaders.set('Content-Type', 'application/json');
@@ -83,6 +88,10 @@ export async function apiRequest<T>(
   const data = isJson ? await response.json() : null;
 
   if (!response.ok) {
+    if (response.status === 401) {
+      clearToken();
+    }
+
     const message =
       (data &&
         typeof data === 'object' &&
