@@ -58,11 +58,15 @@ def extract_output_text(data: dict) -> str:
 def fallback_generate(input_text: str) -> str:
     clean = input_text.strip()
     if not clean:
-        return "I can help you practice English. Tell me one short sentence and I will improve it."
+        return "OpenAI is temporarily unavailable due to quota limits. Please try again in a moment."
+
+    # When upstream is unavailable, keep fallback compact and avoid echoing full conversation context.
+    match = re.search(r"(Mensagem atual|Transcricao atual)\s*:\s*(.+)$", clean, flags=re.IGNORECASE | re.DOTALL)
+    if match:
+        clean = match.group(2).strip()
     return (
         "OpenAI is temporarily unavailable due to quota limits. "
-        "Meanwhile, try this improved sentence in American English: "
-        f"\"{clean}\""
+        f"Please try again in a moment. Last input received: \"{clean[:180]}\""
     )
 
 

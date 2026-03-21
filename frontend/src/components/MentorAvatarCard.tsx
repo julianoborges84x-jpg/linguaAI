@@ -1,4 +1,5 @@
 import { Mic, Brain, Volume2, Repeat2, VolumeX } from 'lucide-react';
+import type { RefObject } from 'react';
 import { VoiceMentor } from '../types';
 
 type TutorState = 'idle' | 'listening' | 'thinking' | 'speaking';
@@ -8,6 +9,8 @@ interface Props {
   state: TutorState;
   muted: boolean;
   clientListening: boolean;
+  localVideoRef: RefObject<HTMLVideoElement | null>;
+  localVideoEnabled: boolean;
   onToggleMute: () => void;
   onReplay: () => void;
 }
@@ -19,7 +22,16 @@ const stateLabel: Record<TutorState, string> = {
   speaking: 'falando',
 };
 
-export default function MentorAvatarCard({ mentor, state, muted, clientListening, onToggleMute, onReplay }: Props) {
+export default function MentorAvatarCard({
+  mentor,
+  state,
+  muted,
+  clientListening,
+  localVideoRef,
+  localVideoEnabled,
+  onToggleMute,
+  onReplay,
+}: Props) {
   const ringClass = state === 'speaking'
     ? 'ring-4 ring-emerald-300 animate-pulse'
     : state === 'listening'
@@ -40,7 +52,17 @@ export default function MentorAvatarCard({ mentor, state, muted, clientListening
         <div className="absolute left-3 top-3 rounded-full bg-black/45 px-2 py-1 text-[10px] font-bold uppercase tracking-wider">Ligacao ao vivo</div>
         <div className="absolute right-3 top-3 rounded-full bg-black/45 px-2 py-1 text-[10px] font-bold uppercase">{stateLabel[state]}</div>
         <div className="absolute bottom-3 right-3 w-20 overflow-hidden rounded-xl border border-white/40 bg-black/40 p-1">
-          <div className={`h-12 rounded-lg bg-white/10 ${clientListening ? 'ring-2 ring-sky-300' : ''}`} />
+          {localVideoEnabled ? (
+            <video
+              ref={localVideoRef}
+              autoPlay
+              playsInline
+              muted
+              className={`h-12 w-full rounded-lg object-cover ${clientListening ? 'ring-2 ring-sky-300' : ''}`}
+            />
+          ) : (
+            <div className={`h-12 rounded-lg bg-white/10 ${clientListening ? 'ring-2 ring-sky-300' : ''}`} />
+          )}
           <p className="mt-1 text-center text-[10px] font-bold">Voce</p>
         </div>
       </div>

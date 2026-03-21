@@ -97,8 +97,11 @@ export default function LiveTutorScreen({ user, onBack, onUpgrade }: Props) {
   const [voiceUsage, setVoiceUsage] = useState<VoiceUsage | null>(null);
   const [introDone, setIntroDone] = useState(false);
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [localVideoEnabled, setLocalVideoEnabled] = useState(false);
   const speechRef = useRef<SpeechSynthesisUtterance | null>(null);
   const recognitionRef = useRef<InstanceType<SpeechRecognitionCtor> | null>(null);
+  const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
 
   const selectedMentor = useMemo(
     () => mentors.find((item) => item.id === selectedMentorId) || null,
@@ -143,6 +146,10 @@ export default function LiveTutorScreen({ user, onBack, onUpgrade }: Props) {
     };
 
     return () => {
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((track) => track.stop());
+        localStreamRef.current = null;
+      }
       if (canSpeak && typeof window !== 'undefined' && window.speechSynthesis) {
         window.speechSynthesis.onvoiceschanged = null;
       }
@@ -187,10 +194,33 @@ export default function LiveTutorScreen({ user, onBack, onUpgrade }: Props) {
     window.speechSynthesis.speak(utterance);
   };
 
+  const ensureLocalVideo = async () => {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setLocalVideoEnabled(false);
+      return;
+    }
+    if (localStreamRef.current) {
+      setLocalVideoEnabled(true);
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      localStreamRef.current = stream;
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+      }
+      setLocalVideoEnabled(true);
+    } catch {
+      setLocalVideoEnabled(false);
+      setError('Permissao de camera negada. A chamada segue apenas com audio e texto.');
+    }
+  };
+
   const startSession = async () => {
     setSessionActive(true);
     setVoiceState('idle');
     setError('');
+    await ensureLocalVideo();
     await trackGrowthEvent('voice_session_started', { mentor_id: selectedMentorId });
 
     if (!introDone && selectedMentor) {
@@ -205,6 +235,11 @@ export default function LiveTutorScreen({ user, onBack, onUpgrade }: Props) {
     if (recognitionRef.current) recognitionRef.current.stop();
     if (speechRef.current && typeof window !== 'undefined' && window.speechSynthesis) {
       window.speechSynthesis.cancel();
+    }
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => track.stop());
+      localStreamRef.current = null;
+      setLocalVideoEnabled(false);
     }
     setSessionActive(false);
     setVoiceState('idle');
@@ -326,6 +361,8 @@ export default function LiveTutorScreen({ user, onBack, onUpgrade }: Props) {
           state={voiceState}
           muted={muted}
           clientListening={voiceState === 'listening'}
+          localVideoRef={localVideoRef}
+          localVideoEnabled={localVideoEnabled}
           onToggleMute={() => setMuted((prev) => !prev)}
           onReplay={() => void replayLast()}
         />

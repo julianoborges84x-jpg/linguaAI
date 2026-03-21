@@ -31,6 +31,8 @@ from app.services.progress_service import today_for_user
 router = APIRouter(prefix="/mentor", tags=["mentor"])
 logger = logging.getLogger("linguaai.mentor")
 VOICE_FREE_LIMIT_MESSAGE = "🔒 Você atingiu o limite gratuito. Desbloqueie o PRO para continuar falando com seu mentor."
+LLM_QUOTA_SIGNATURE = "openai is temporarily unavailable due to quota limits"
+LLM_KEY_SIGNATURE = "openai_api_key not configured"
 DEFAULT_LANGUAGE_CATALOG: dict[str, tuple[str, str, str]] = {
     "en": ("English", "United States", "Indo-European"),
     "eng": ("English", "United States", "Indo-European"),
@@ -169,7 +171,19 @@ def build_history_context(db: Session, user_id: int, limit: int = 10) -> str:
         .all()
     )
     items.reverse()
-    return "\n".join([f"{i.role}: {i.content}" for i in items])
+    filtered: list[str] = []
+    for item in items:
+        content = (item.content or "").strip()
+        lowered = content.lower()
+        if LLM_QUOTA_SIGNATURE in lowered or LLM_KEY_SIGNATURE in lowered:
+            continue
+        filtered.append(f"{item.role}: {content}")
+    return "\n".join(filtered)
+
+
+def _is_upstream_quota_fallback(text: str) -> bool:
+    lowered = (text or "").strip().lower()
+    return LLM_QUOTA_SIGNATURE in lowered or LLM_KEY_SIGNATURE in lowered
 
 
 def _voice_free_limit() -> int:
@@ -340,6 +354,12 @@ def chat(
         logger.info("chat calling llm user_id=%s url=%s", user.id, llm_client.get_llm_service_url())
         reply = llm_client.generate_reply(instructions, input_text)
         logger.info("chat llm response ok user_id=%s", user.id)
+        if _is_upstream_quota_fallback(reply):
+            llm_fallback_reason = "OpenAI quota limits"
+            reply = (
+                "Estou com indisponibilidade temporaria no motor de IA agora. "
+                "Tente novamente em alguns instantes e, se quiser, envie uma frase curta para eu revisar manualmente."
+            )
     except llm_client.LLMServiceError as exc:
         logger.warning("mentor chat llm failed user_id=%s feature=%s: %s", user.id, payload.feature, exc.message)
         llm_fallback_reason = exc.message
@@ -471,6 +491,8 @@ def voice_chat(
         logger.info("voice chat calling llm user_id=%s mentor_id=%s url=%s", user.id, payload.mentor_id, llm_client.get_llm_service_url())
         reply = llm_client.generate_reply(instructions, input_text)
         logger.info("voice chat llm response ok user_id=%s mentor_id=%s", user.id, payload.mentor_id)
+        if _is_upstream_quota_fallback(reply):
+            raise llm_client.LLMServiceError("OpenAI quota limits")
     except llm_client.LLMServiceError as exc:
         logger.warning("voice chat failed for user_id=%s mentor_id=%s: %s", user.id, payload.mentor_id, exc.message)
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=exc.message)
