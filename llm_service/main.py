@@ -1,5 +1,6 @@
 import os
 import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import httpx
 from fastapi import FastAPI, HTTPException
@@ -17,6 +18,9 @@ def _env(name: str, default: str = "") -> str:
 OPENAI_API_KEY = _env("OPENAI_API_KEY")
 OPENAI_MODEL = _env("OPENAI_MODEL", "gpt-4.1-mini")
 OPENAI_BASE_URL = _env("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+OPENAI_QUOTA_COOLDOWN_SECONDS = int(_env("OPENAI_QUOTA_COOLDOWN_SECONDS", "180") or 180)
+
+_quota_block_until: datetime | None = None
 
 app = FastAPI(title="LLM Service")
 
@@ -53,6 +57,20 @@ def extract_output_text(data: dict) -> str:
                 if content.get("type") in {"output_text", "text"}:
                     output.append(content.get("text", ""))
     return "".join(output).strip()
+
+
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _quota_block_active() -> bool:
+    return _quota_block_until is not None and _now_utc() < _quota_block_until
+
+
+def _mark_quota_block() -> None:
+    global _quota_block_until
+    seconds = max(30, OPENAI_QUOTA_COOLDOWN_SECONDS)
+    _quota_block_until = _now_utc() + timedelta(seconds=seconds)
 
 
 def fallback_generate(input_text: str) -> str:
@@ -114,10 +132,13 @@ def call_openai(instructions: str, input_text: str) -> str:
 def generate_response(instructions: str, input_text: str) -> str:
     if not OPENAI_API_KEY:
         raise OpenAIUpstreamError(status_code=503, detail="OPENAI_API_KEY not configured")
+    if _quota_block_active():
+        return fallback_generate(input_text)
     try:
         return call_openai(instructions, input_text)
     except OpenAIUpstreamError as exc:
         if exc.status_code == 429:
+            _mark_quota_block()
             return fallback_generate(input_text)
         raise
 
@@ -125,6 +146,8 @@ def generate_response(instructions: str, input_text: str) -> str:
 def detect_language_response(input_text: str) -> str:
     if not OPENAI_API_KEY:
         raise OpenAIUpstreamError(status_code=503, detail="OPENAI_API_KEY not configured")
+    if _quota_block_active():
+        return fallback_detect_language(input_text)
 
     instructions = (
         "Detect the language of the input text and respond with the ISO 639-3 code only. "
@@ -135,6 +158,7 @@ def detect_language_response(input_text: str) -> str:
         return output_text.strip().split()[0]
     except OpenAIUpstreamError as exc:
         if exc.status_code == 429:
+            _mark_quota_block()
             return fallback_detect_language(input_text)
         raise
 

@@ -85,6 +85,11 @@ def health():
         logger.exception("Database healthcheck failed")
     return {"status": "ok" if db_ok else "degraded", "database": "ok" if db_ok else "error"}
 
+
+@app.get("/favicon.ico", include_in_schema=False, status_code=204)
+def favicon():
+    return None
+
 @app.post("/webhook", include_in_schema=False)
 async def legacy_webhook(
     request: Request,
