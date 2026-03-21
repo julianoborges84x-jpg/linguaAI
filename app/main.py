@@ -27,6 +27,7 @@ from app.api.routes import (
     daily_challenge,
     referral,
     pedagogy,
+    realtime,
 )
 from app.core.config import settings
 from app.core.database import Base, SessionLocal, engine
@@ -122,3 +123,4 @@ app.include_router(real_life)
 app.include_router(daily_challenge)
 app.include_router(referral)
 app.include_router(pedagogy)
+app.include_router(realtime)

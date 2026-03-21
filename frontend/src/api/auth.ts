@@ -25,6 +25,9 @@ import {
   SessionStartResponse,
   SessionTopic,
   OAuthProviderStatus,
+  RealtimeSessionSignalResponse,
+  RealtimeSessionStartResponse,
+  RealtimeSessionStopResponse,
   VoiceMentor,
   VoiceMentorChatResponse,
   VoiceUsage,
@@ -411,6 +414,32 @@ export async function submitReviewToday(payload: { review_item_id: number; corre
 export async function fetchProgressSummary() {
   return apiRequest<ProgressSummaryData>('/pedagogy/progress/summary', {
     method: 'GET',
+    authenticated: true,
+  });
+}
+
+export async function startRealtimeSession(payload: { mentor_id: string; mode?: string }) {
+  return apiRequest<RealtimeSessionStartResponse>('/realtime/sessions/start', {
+    method: 'POST',
+    authenticated: true,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function sendRealtimeSignal(
+  sessionId: string,
+  payload: { signal_type: string; payload?: Record<string, unknown> },
+) {
+  return apiRequest<RealtimeSessionSignalResponse>(`/realtime/sessions/${sessionId}/signal`, {
+    method: 'POST',
+    authenticated: true,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function stopRealtimeSession(sessionId: string) {
+  return apiRequest<RealtimeSessionStopResponse>(`/realtime/sessions/${sessionId}/stop`, {
+    method: 'POST',
     authenticated: true,
   });
 }

@@ -347,6 +347,34 @@ export interface OAuthProviderStatus {
   authorization_url?: string | null;
 }
 
+export interface RealtimeIceServer {
+  urls: string[];
+  username?: string | null;
+  credential?: string | null;
+}
+
+export interface RealtimeSessionStartResponse {
+  session_id: string;
+  status: string;
+  created_at: string;
+  expires_at: string;
+  signaling_path: string;
+  ice_servers: RealtimeIceServer[];
+  beta: boolean;
+}
+
+export interface RealtimeSessionSignalResponse {
+  session_id: string;
+  accepted: boolean;
+  status: string;
+}
+
+export interface RealtimeSessionStopResponse {
+  session_id: string;
+  status: string;
+  ended_at: string;
+}
+
 export interface AdaptiveRecommendation {
   recommendation_type: string;
   title: string;

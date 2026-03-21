@@ -16,6 +16,7 @@ from .real_life import router as real_life
 from .daily_challenge import router as daily_challenge
 from .referral import router as referral
 from .pedagogy import router as pedagogy
+from .realtime import router as realtime
 
 __all__ = [
     "auth",
@@ -36,4 +37,5 @@ __all__ = [
     "daily_challenge",
     "referral",
     "pedagogy",
+    "realtime",
 ]
