@@ -46,7 +46,6 @@ def ensure_referral_code(db: Session, user: User) -> str:
             user.referral_code = normalized
             return user.referral_code
 
-    # Deterministic default avoids race conditions and collisions in concurrent requests.
     deterministic = "lingua" + _to_base36(int(user.id)).rjust(5, "0")[-5:]
     owner = db.query(User.id).filter(User.referral_code == deterministic).first()
     if not owner or int(owner[0]) == int(user.id):
@@ -153,7 +152,6 @@ def get_mission_today(db: Session, user: User) -> DailyMissionProgress:
 
 
 def _xp_curve_info(xp_total: int) -> dict[str, int]:
-    # Keep legacy level formula for compatibility and show clearer level progress.
     level = recalculate_level(xp_total)
     xp_floor = level * 100
     xp_next = (level + 1) * 100
@@ -169,6 +167,7 @@ def weekly_progress(db: Session, user: User, days: int = 7) -> list[dict]:
     today = today_for_user(user)
     start_day = today - timedelta(days=days - 1)
     start_dt = datetime.combine(start_day, datetime.min.time())
+
     sessions = (
         db.query(StudySession)
         .filter(
@@ -179,7 +178,10 @@ def weekly_progress(db: Session, user: User, days: int = 7) -> list[dict]:
         .all()
     )
 
-    buckets: dict[date, dict[str, int]] = defaultdict(lambda: {"sessions_count": 0, "minutes_studied": 0, "xp_earned": 0})
+    buckets: dict[date, dict[str, int]] = defaultdict(
+        lambda: {"sessions_count": 0, "minutes_studied": 0, "xp_earned": 0}
+    )
+
     for session in sessions:
         finished_day = session.finished_at.date()
         duration = max(1, int((session.finished_at - session.started_at).total_seconds() // 60))
@@ -206,12 +208,14 @@ def weekly_leaderboard(db: Session, limit: int = 10, target_language_code: str |
     end_dt = datetime.now(UTC).replace(tzinfo=None)
     start_dt = end_dt - timedelta(days=7)
 
+    xp_week_expr = func.coalesce(func.sum(StudySession.xp_earned), 0)
+
     query = (
         db.query(
             User.id.label("user_id"),
             User.name.label("name"),
             User.target_language_code.label("target_language_code"),
-            func.coalesce(func.sum(StudySession.xp_earned), 0).label("xp_week"),
+            xp_week_expr.label("xp_week"),
         )
         .join(StudySession, StudySession.user_id == User.id)
         .filter(
@@ -219,16 +223,19 @@ def weekly_leaderboard(db: Session, limit: int = 10, target_language_code: str |
             StudySession.finished_at >= start_dt,
             StudySession.finished_at <= end_dt,
         )
-        .group_by(User.id, User.name, User.target_language_code)
-        .order_by(func.coalesce(func.sum(StudySession.xp_earned), 0).desc(), User.id.asc())
     )
 
     if target_language_code:
         query = query.filter(User.target_language_code == target_language_code)
 
-    query = query.limit(limit)
+    query = (
+        query.group_by(User.id, User.name, User.target_language_code)
+        .order_by(xp_week_expr.desc(), User.id.asc())
+        .limit(limit)
+    )
 
     rows = query.all()
+
     return [
         {
             "rank": idx + 1,
