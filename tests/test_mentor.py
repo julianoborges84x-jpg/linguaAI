@@ -274,5 +274,7 @@ def test_voice_mentor_returns_useful_llm_error(client, monkeypatch, db_session):
         headers=auth_header(token),
         json={"mentor_id": "clara", "message": "hello"},
     )
-    assert chat.status_code == 503
-    assert "LLM_SERVICE_URL" in chat.json()["detail"]
+    assert chat.status_code == 200
+    payload = chat.json()
+    assert payload["audio_available"] is False
+    assert "indisponibilidade temporaria" in payload["reply"].lower()

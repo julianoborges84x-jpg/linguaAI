@@ -487,6 +487,7 @@ def voice_chat(
     if history_text:
         input_text = f"Historico:\n{history_text}\n\nTranscricao atual:\n{payload.message}"
 
+    audio_available = True
     try:
         logger.info("voice chat calling llm user_id=%s mentor_id=%s url=%s", user.id, payload.mentor_id, llm_client.get_llm_service_url())
         reply = llm_client.generate_reply(instructions, input_text)
@@ -495,7 +496,11 @@ def voice_chat(
             raise llm_client.LLMServiceError("OpenAI quota limits")
     except llm_client.LLMServiceError as exc:
         logger.warning("voice chat failed for user_id=%s mentor_id=%s: %s", user.id, payload.mentor_id, exc.message)
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=exc.message)
+        reply = (
+            "Estou com indisponibilidade temporaria no motor de IA agora. "
+            "Tente novamente em alguns instantes e, se quiser, envie uma frase curta para eu revisar manualmente."
+        )
+        audio_available = False
 
     db.add(LearningHistory(user_id=user.id, role="user", content=payload.message, feature="voice"))
     db.add(LearningHistory(user_id=user.id, role="assistant", content=reply, feature="voice"))
@@ -529,7 +534,7 @@ def voice_chat(
         transcript=payload.message,
         reply=reply,
         tts_text=reply,
-        audio_available=True,
+        audio_available=audio_available,
         voice_usage=_voice_usage_payload(user),
     )
 
